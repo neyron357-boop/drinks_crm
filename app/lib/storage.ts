@@ -1,22 +1,38 @@
 import { AppState } from "./types";
 import { createInitialState, emptyCashColumns, STORAGE_KEY } from "./seed";
+import { normalizeProductCatalog } from "./product-order";
 
 function normalizeState(state: AppState): AppState {
+  const products = normalizeProductCatalog(state.products, state.points);
+
   return {
     ...state,
+    products,
     reports: state.reports.map((report) => {
       const defaults = emptyCashColumns(report.pointId, state.drivers);
       return {
         ...report,
+        items: {
+          ...Object.fromEntries(
+            products
+              .filter((product) => !product.pointIds || product.pointIds.includes(report.pointId))
+              .map((product) => [product.id, { productId: product.id, incoming: 0, movement: 0, extraRequest: 0 }])
+          ),
+          ...report.items
+        },
         cashColumns: Object.fromEntries(
           Object.entries(defaults).map(([columnKey, defaultCash]) => {
             const savedCash = report.cashColumns[columnKey as keyof typeof defaults];
+            const mergedCash = {
+              ...defaultCash,
+              ...savedCash,
+              driverName: savedCash?.driverName || defaultCash.driverName
+            };
             return [
               columnKey,
               {
-                ...defaultCash,
-                ...savedCash,
-                driverName: savedCash?.driverName || defaultCash.driverName
+                ...mergedCash,
+                foodExpenses: mergedCash.driverName && !report.closed && Number(mergedCash.foodExpenses) === 0 ? 80 : mergedCash.foodExpenses
               }
             ];
           })

@@ -2,21 +2,33 @@ import type { AppState, DailyReport, Product } from "./types";
 import { money } from "./numbers";
 import { createEmptyReport, reportId } from "./seed";
 
-/** Остаток с прошлого дня: homeRest → currentRest → норма */
+function itemRest(report: DailyReport, productId: string) {
+  const item = report.items[productId];
+  if (!item) return undefined;
+  if (typeof item.homeRest === "number" && Number.isFinite(item.homeRest)) return money(item.homeRest);
+  if (typeof item.currentRest === "number" && Number.isFinite(item.currentRest)) return money(item.currentRest);
+  return undefined;
+}
+
+/** Остаток с прошлого дня: закрытый отчет → импортированный отчет → норма. */
 export function getCarryoverRest(state: AppState, date: string, pointId: string, product: Product): number {
-  const priorReports = state.reports
+  const priorClosedReports = state.reports
+    .filter((report) => report.pointId === pointId && report.date < date && report.closed)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  for (const report of priorClosedReports) {
+    const rest = itemRest(report, product.id);
+    if (typeof rest === "number") return rest;
+  }
+
+  // Fallback keeps imported/open legacy data usable, but closed reports remain canonical.
+  const priorAnyReports = state.reports
     .filter((report) => report.pointId === pointId && report.date < date)
     .sort((a, b) => b.date.localeCompare(a.date));
 
-  for (const report of priorReports) {
-    const item = report.items[product.id];
-    if (!item) continue;
-    if (typeof item.homeRest === "number" && Number.isFinite(item.homeRest)) {
-      return money(item.homeRest);
-    }
-    if (typeof item.currentRest === "number" && Number.isFinite(item.currentRest)) {
-      return money(item.currentRest);
-    }
+  for (const report of priorAnyReports) {
+    const rest = itemRest(report, product.id);
+    if (typeof rest === "number") return rest;
   }
 
   return money(product.norm);
@@ -45,7 +57,7 @@ export function applyCarryoverAfterClose(state: AppState, closedReport: DailyRep
   const nextItems = { ...base.items };
   for (const product of state.products) {
     if (product.pointIds && !product.pointIds.includes(closedReport.pointId)) continue;
-    const carry = getCarryoverRest(state, nextDate, closedReport.pointId, product);
+    const carry = itemRest(closedReport, product.id) ?? getCarryoverRest(state, nextDate, closedReport.pointId, product);
     const prev = nextItems[product.id];
     nextItems[product.id] = {
       productId: product.id,

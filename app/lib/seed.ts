@@ -1,11 +1,12 @@
 import { AppState, CashColumnKey, CashInput, DailyReport, Driver, Point, Product } from "./types";
 import { CASH_COLUMN_KEYS, TEMPLATE_POINT_SEEDS, TEMPLATE_PRODUCTS, TEMPLATE_REPORTS } from "./template-data";
+import { normalizeProductCatalog } from "./product-order";
 
 export const STORAGE_KEY = "drink-sales-ledger-state-v2";
 
 export const initialPoints: Point[] = TEMPLATE_POINT_SEEDS;
 
-export const initialProducts: Product[] = TEMPLATE_PRODUCTS;
+export const initialProducts: Product[] = normalizeProductCatalog(TEMPLATE_PRODUCTS, initialPoints);
 
 export const initialDrivers: Driver[] = [
   { id: "driver-farrukh", name: "Фаррух", pointId: "jvc", active: true },
@@ -27,7 +28,7 @@ export function emptyCash(columnKey: CashColumnKey, driverName = ""): CashInput 
     columnKey,
     driverName,
     productRevenue: 0,
-    foodExpenses: 0,
+    foodExpenses: driverName ? 80 : 0,
     weReturnedDebt: 0,
     weOwe: 0,
     clientReturnedDebt: 0,

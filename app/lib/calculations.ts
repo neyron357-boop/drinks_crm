@@ -12,12 +12,15 @@ import {
 import { getCarryoverRest } from "./carryover";
 import { createEmptyReport, reportId } from "./seed";
 import { CASH_COLUMN_KEYS } from "./template-data";
+import { productSortNumber } from "./product-order";
 import { money } from "./numbers";
 
 export { money };
 
 export function getActiveProducts(state: AppState, pointId?: string) {
-  return state.products.filter((product) => product.active && (!pointId || !product.pointIds || product.pointIds.includes(pointId)));
+  return state.products
+    .filter((product) => product.active && (!pointId || !product.pointIds || product.pointIds.includes(pointId)))
+    .sort((a, b) => productSortNumber(a, pointId) - productSortNumber(b, pointId));
 }
 
 export function getReport(state: AppState, date: string, pointId: string) {

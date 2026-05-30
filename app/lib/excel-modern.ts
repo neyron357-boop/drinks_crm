@@ -144,6 +144,7 @@ function buildPointSheet(workbook: Workbook, state: AppState, pointId: string, d
     (cash) => cash.driverName || cash.productRevenue || cash.handedOver || (cash.customExpenses?.length ?? 0) > 0
   );
   const activeColumns = (cashColumns.length ? cashColumns : calculateCashColumns(report)).slice(0, 7);
+  const cashRevenueRows: number[] = [];
 
   for (const cash of activeColumns) {
     const columnKey = (cash.columnKey ?? "F") as CashColumnKey;
@@ -169,6 +170,7 @@ function buildPointSheet(workbook: Workbook, state: AppState, pointId: string, d
     };
 
     const revenueRow = writeAmountRow("Выручка (товары)", cash.productRevenue);
+    cashRevenueRows.push(revenueRow);
     const creditFields = new Set<keyof CashInput>(["weOwe", "clientReturnedDebt"]);
     for (const [field, label] of cashLabels) {
       const value = Number(cash[field]) || 0;
@@ -214,27 +216,33 @@ function buildPointSheet(workbook: Workbook, state: AppState, pointId: string, d
   reconTitle.fill = { type: "pattern", pattern: "solid", fgColor: { argb: COLORS.subheader } };
   cashRow += 1;
 
-  const reconRows = [
-    ["Выручка по товарам (итого)", revenue],
-    ["Сумма выручки водителей", cashRevenueTotal],
-    ["Разница (касса − товары)", reconciliationDiff]
-  ] as const;
+  const productRevenueRow = cashRow;
+  worksheet.getRow(productRevenueRow).getCell(1).value = "Выручка по товарам (итого)";
+  worksheet.getCell(`B${productRevenueRow}`).value = formulaCell(`J${totalRow}`, revenue);
+  worksheet.getRow(productRevenueRow).getCell(1).font = { size: 10 };
+  styleBodyCell(worksheet.getCell(`B${productRevenueRow}`), { align: "right", bold: true });
+  cashRow += 1;
 
-  for (const [label, value] of reconRows) {
-    const row = worksheet.getRow(cashRow);
-    row.getCell(1).value = label;
-    row.getCell(2).value = value;
-    row.getCell(1).font = { size: 10, bold: label.includes("Разница") };
-    styleBodyCell(row.getCell(2), { align: "right", bold: true });
-    if (label.includes("Разница")) {
-      row.getCell(2).fill = {
-        type: "pattern",
-        pattern: "solid",
-        fgColor: { argb: reconciliationDiff === 0 ? COLORS.ok : COLORS.warn }
-      };
-    }
-    cashRow += 1;
-  }
+  const cashRevenueRow = cashRow;
+  worksheet.getRow(cashRevenueRow).getCell(1).value = "Сумма выручки водителей";
+  worksheet.getCell(`B${cashRevenueRow}`).value = formulaCell(
+    cashRevenueRows.length ? `SUM(${cashRevenueRows.map((row) => `B${row}`).join(",")})` : "0",
+    cashRevenueTotal
+  );
+  worksheet.getRow(cashRevenueRow).getCell(1).font = { size: 10 };
+  styleBodyCell(worksheet.getCell(`B${cashRevenueRow}`), { align: "right", bold: true });
+  cashRow += 1;
+
+  const diffRow = cashRow;
+  worksheet.getRow(diffRow).getCell(1).value = "Разница (касса − товары)";
+  worksheet.getCell(`B${diffRow}`).value = formulaCell(`B${cashRevenueRow}-B${productRevenueRow}`, reconciliationDiff);
+  worksheet.getRow(diffRow).getCell(1).font = { size: 10, bold: true };
+  styleBodyCell(worksheet.getCell(`B${diffRow}`), { align: "right", bold: true });
+  worksheet.getCell(`B${diffRow}`).fill = {
+    type: "pattern",
+    pattern: "solid",
+    fgColor: { argb: reconciliationDiff === 0 ? COLORS.ok : COLORS.warn }
+  };
 
   worksheet.views = [{ state: "frozen", ySplit: 3 }];
 }
