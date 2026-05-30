@@ -36,7 +36,7 @@ npm run build
 
 Текущая версия работает локально через `localStorage`, чтобы можно было быстро проверить рабочий процесс без ключей Supabase.
 
-Черновая Supabase/PostgreSQL схема лежит в [supabase/schema.sql](./supabase/schema.sql). Следующий шаг - подключить `Supabase Auth`, заменить локальное хранилище на CRUD-операции и включить RLS-политики под реальные аккаунты.
+Supabase/PostgreSQL миграции лежат в [supabase/migrations](./supabase/migrations). Инструкция по привязке проекта, ролям, RLS и переносу остатков: [SUPABASE_SETUP.md](./SUPABASE_SETUP.md).
 
 ## Примечание по аудиту зависимостей
 
