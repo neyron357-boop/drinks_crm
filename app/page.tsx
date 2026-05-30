@@ -2,27 +2,29 @@
 
 import {
   AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
   BarChart3,
   CheckCircle2,
   ChevronDown,
-  ChevronUp,
-  FileSpreadsheet,
+  Download,
+  Home as HomeIcon,
   Lock,
+  Mic,
+  Minus,
+  MoreHorizontal,
   Package,
+  PackagePlus,
   Plus,
-  Receipt,
-  Save,
+  ScanLine,
   Search,
   Settings,
-  Trash2,
+  Star,
   Truck,
-  TrendingUp,
-  UserPlus,
-  Users,
   WalletCards,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import {
   calculateCash,
   calculateCashColumns,
@@ -33,46 +35,107 @@ import {
   canCloseReport,
   countProblems,
   getReport,
-  getReportWarnings,
-  getTransferMovement,
-  money
+  getReportWarnings
 } from "./lib/calculations";
 import { applyCarryoverAfterClose } from "./lib/carryover";
 import { createExcelReportFile } from "./lib/excel";
-import { importExcelReport } from "./lib/excel-import";
 import { formatDecimal, parseDecimal, parseOptionalDecimal } from "./lib/numbers";
 import { createEmptyReport, createInitialState, emptyCash, reportId } from "./lib/seed";
 import { loadState, saveState } from "./lib/storage";
-import   type {
+import type {
   AppState,
   CashColumnKey,
   CashInput,
   CustomExpense,
   DailyReport,
   Driver,
-  Point,
   ExportOptions,
-  ImportMode,
+  Point,
   Product,
   ReportItemInput,
+  ReportLine,
   Transfer
 } from "./lib/types";
 
-type Tab = "products" | "cash" | "transfers" | "stats" | "settings";
+type Tab = "home" | "inventory" | "receipts" | "transfers" | "finance" | "more";
+type CategoryId = "spirits" | "beer" | "wine" | "sparkling" | "premium";
+type InventoryView = "categories" | "quick" | "list";
+type LineTone = "empty" | "done" | "warn";
+type SpeechRecognitionResultEventLike = { results?: ArrayLike<ArrayLike<{ transcript: string }>> };
+type SpeechRecognitionLike = {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start: () => void;
+  onstart: (() => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  onresult: ((event: SpeechRecognitionResultEventLike) => void) | null;
+};
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
-const cashFields: Array<[keyof Omit<CashInput, "columnKey" | "driverId" | "driverName" | "productRevenue" | "handedOver" | "comment" | "customExpenses">, string]> = [
-  ["foodExpenses", "🍔 Питание"],
-  ["discounts", "🏷️ Скидки"],
-  ["fuel", "⛽ Бензин"],
-  ["kfc", "🍗 KFC"],
-  ["forHome", "🏠 Для дома"],
-  ["carWash", "🚿 Мойка"],
-  ["tinting", "🪟 Тонировка"],
-  ["otherExpenses", "📦 Другие расходы"],
-  ["weReturnedDebt", "↩️ Мы вернули долг"],
-  ["weOwe", "📤 Мы должны"],
-  ["clientReturnedDebt", "↪️ Клиент вернул долг"],
-  ["clientTookDebt", "📥 Клиент взял в долг"]
+const categoryDefs: Array<{
+  id: CategoryId;
+  title: string;
+  icon: string;
+  matcher: RegExp;
+}> = [
+  {
+    id: "spirits",
+    title: "Крепкий алкоголь",
+    icon: "🥃",
+    matcher:
+      /absolut|vodka|whisk|whisky|jack|j\/w|johnnie|chivas|gin|rum|tequila|cognac|hennessy|raki|arak|patron|don julio|aperol|belvedere|beluga|cirok|smirnoff|bacardi|macallan|glen/i
+  },
+  {
+    id: "beer",
+    title: "Пиво",
+    icon: "🍺",
+    matcher: /beer|heineken|corona|stella|budweiser|carlsberg|amstel|peroni|guinness|hoegarden|asahi|red horse|can|btl/i
+  },
+  {
+    id: "wine",
+    title: "Вино",
+    icon: "🍷",
+    matcher:
+      /wine|chardonnay|merlot|sauv|cabernet|pinot|shiraz|malbec|rioj|chablis|gavi|sancerre|bourgogne|campo|oyster|ksara|mateus|calvet|castel|chateau|rose/i
+  },
+  {
+    id: "sparkling",
+    title: "Шампанское",
+    icon: "🍾",
+    matcher: /champagne|moet|veuve|prosecco|asti|bottega|ruinart|dom perignon|brut|sparkling|zonin/i
+  },
+  {
+    id: "premium",
+    title: "Премиум",
+    icon: "⭐",
+    matcher:
+      /blue label|gold label|xo|vsop|royal salute|chivas 18|chivas 25|macallan|dom perignon|clase azul|don julio 1942|grey goose|cirok|veuve|ruinart|patron/i
+  }
+];
+
+const favoriteNeedles = ["ABSOLUT", "JACK DANIELS", "CHIVAS", "HEINEKEN", "CORONA"];
+
+type CashNumberField =
+  | "discounts"
+  | "foodExpenses"
+  | "fuel"
+  | "kfc"
+  | "forHome"
+  | "carWash"
+  | "tinting"
+  | "otherExpenses";
+
+const cashFields: Array<[CashNumberField, string]> = [
+  ["discounts", "Скидки"],
+  ["foodExpenses", "Питание"],
+  ["fuel", "Бензин"],
+  ["kfc", "KFC"],
+  ["forHome", "Для дома"],
+  ["carWash", "Мойка"],
+  ["tinting", "Тонировка"],
+  ["otherExpenses", "Другие расходы"]
 ];
 
 const todayIso = () => {
@@ -99,23 +162,6 @@ function slugify(value: string) {
   );
 }
 
-function ensureReport(state: AppState, date: string, pointId: string, driverId: string): AppState {
-  const id = reportId(date, pointId);
-  if (state.reports.some((report) => report.id === id)) return state;
-  return {
-    ...state,
-    reports: [...state.reports, createEmptyReport(date, pointId, driverId, state.products)]
-  };
-}
-
-function replaceReport(state: AppState, nextReport: DailyReport): AppState {
-  const exists = state.reports.some((report) => report.id === nextReport.id);
-  return {
-    ...state,
-    reports: exists ? state.reports.map((report) => (report.id === nextReport.id ? nextReport : report)) : [...state.reports, nextReport]
-  };
-}
-
 function nextUniqueId(items: Array<{ id: string }>, base: string) {
   let id = base;
   let index = 2;
@@ -124,6 +170,12 @@ function nextUniqueId(items: Array<{ id: string }>, base: string) {
     index += 1;
   }
   return id;
+}
+
+function addDaysIso(date: string, days: number) {
+  const cursor = new Date(`${date}T12:00:00`);
+  cursor.setDate(cursor.getDate() + days);
+  return cursor.toISOString().slice(0, 10);
 }
 
 function hasCashValues(cash: CashInput) {
@@ -146,120 +198,58 @@ function hasCashValues(cash: CashInput) {
   );
 }
 
-function QuantityInput({
-  ariaLabel,
-  value,
-  placeholder = "0",
-  disabled,
-  optional = false,
-  min = 0,
-  step = 0.5,
-  className = "",
-  hint,
-  navGroup,
-  onChange,
-}: {
-  ariaLabel: string;
-  value: number | undefined;
-  placeholder?: string;
-  disabled: boolean;
-  optional?: boolean;
-  min?: number | null;
-  step?: number;
-  className?: string;
-  hint?: ReactNode;
-  navGroup?: string;
-  onChange: (value: number | undefined) => void;
-}) {
-  const inputRef = useRef<HTMLInputElement>(null);
+function lineTone(line: ReportLine): LineTone {
+  if (typeof line.homeRest !== "number") return "empty";
+  if (line.homeRest > line.available || line.warnings.some((warning) => warning.severity !== "info")) return "warn";
+  return "done";
+}
 
-  const commitStep = (delta: number) => {
-    if (disabled) return;
+function lineStatusText(line: ReportLine) {
+  const tone = lineTone(line);
+  if (tone === "empty") return "Не заполнено";
+  if (tone === "warn") return "Проверьте данные";
+  return "Заполнено";
+}
 
-    const rawValue = inputRef.current?.value ?? "";
-    const base = rawValue ? parseNumber(rawValue) : typeof value === "number" && Number.isFinite(value) ? value : 0;
-    const next = parseNumber(String(base + delta));
-    const bounded = min === null ? next : Math.max(min, next);
-    if (inputRef.current) inputRef.current.value = num(bounded);
-    onChange(bounded);
+function productMatchesCategory(product: Product, categoryId: CategoryId) {
+  const name = product.name.toLowerCase();
+  const category = categoryDefs.find((item) => item.id === categoryId);
+  if (!category) return true;
+  if (category.matcher.test(name)) return true;
+  if (categoryId === "spirits") return !categoryDefs.some((item) => item.id !== "spirits" && item.id !== "premium" && item.matcher.test(name));
+  return false;
+}
+
+function extractSpokenNumber(text: string) {
+  const match = text.replace(",", ".").match(/-?\d+(?:\.\d+)?/);
+  if (!match) return undefined;
+  return parseOptionalNumber(match[0]);
+}
+
+function replaceReport(state: AppState, nextReport: DailyReport): AppState {
+  const exists = state.reports.some((report) => report.id === nextReport.id);
+  return {
+    ...state,
+    reports: exists ? state.reports.map((report) => (report.id === nextReport.id ? nextReport : report)) : [...state.reports, nextReport]
   };
+}
 
-  const focusNextInColumn = () => {
-    if (!navGroup || !inputRef.current) return;
-    const inputs = Array.from(
-      document.querySelectorAll<HTMLInputElement>(`input[data-quantity-group="${navGroup}"]:not(:disabled)`)
-    );
-    const currentIndex = inputs.indexOf(inputRef.current);
-    const nextInput = inputs[currentIndex + 1];
-    if (!nextInput) return;
-    nextInput.focus();
-    nextInput.select();
+function ensureReport(state: AppState, date: string, pointId: string, driverId: string): AppState {
+  const id = reportId(date, pointId);
+  if (state.reports.some((report) => report.id === id)) return state;
+  return {
+    ...state,
+    reports: [...state.reports, createEmptyReport(date, pointId, driverId, state.products)]
   };
-
-  return (
-    <label
-      className={`field-inline quantity-field ${className}`}
-    >
-      <input
-        ref={inputRef}
-        type="text"
-        inputMode="decimal"
-        aria-label={ariaLabel}
-        data-quantity-group={navGroup}
-        placeholder={placeholder}
-        value={num(value)}
-        disabled={disabled}
-        onChange={(e) => onChange(optional ? parseOptionalNumber(e.target.value) : parseNumber(e.target.value))}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowUp") {
-            e.preventDefault();
-            commitStep(step);
-          }
-          if (e.key === "ArrowDown") {
-            e.preventDefault();
-            commitStep(-step);
-          }
-          if (e.key === "Enter") {
-            e.preventDefault();
-            focusNextInColumn();
-          }
-        }}
-      />
-      <span className="quantity-arrows">
-        <button
-          type="button"
-          tabIndex={-1}
-          disabled={disabled}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            commitStep(step);
-          }}
-          aria-label={`${ariaLabel}: увеличить`}
-        >
-          <ChevronUp size={12} />
-        </button>
-        <button
-          type="button"
-          tabIndex={-1}
-          disabled={disabled}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            commitStep(-step);
-          }}
-          aria-label={`${ariaLabel}: уменьшить`}
-        >
-          <ChevronDown size={12} />
-        </button>
-      </span>
-      {hint}
-    </label>
-  );
 }
 
 export default function Home() {
   const [state, setState] = useState<AppState>(() => createInitialState());
   const [hydrated, setHydrated] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>("products");
+  const [activeTab, setActiveTab] = useState<Tab>("home");
+  const [inventoryView, setInventoryView] = useState<InventoryView>("categories");
+  const [selectedCategory, setSelectedCategory] = useState<CategoryId | null>(null);
+  const [quickIndex, setQuickIndex] = useState(0);
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [selectedPointId, setSelectedPointId] = useState("jvc");
   const [selectedDriverId, setSelectedDriverId] = useState("driver-farrukh");
@@ -268,23 +258,17 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [preparedDownload, setPreparedDownload] = useState<{ url: string; fileName: string } | null>(null);
   const [lastSaved, setLastSaved] = useState("");
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerQuery, setScannerQuery] = useState("");
+  const [progressOpen, setProgressOpen] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [receiptSearch, setReceiptSearch] = useState("");
+  const [transferSearch, setTransferSearch] = useState("");
   const [newPointName, setNewPointName] = useState("");
-  const [newProduct, setNewProduct] = useState({ name: "", price: 0, norm: 0, category: "Напитки" });
   const [newDriver, setNewDriver] = useState({ name: "", pointId: "jvc" });
+  const [newProduct, setNewProduct] = useState({ name: "", price: "", norm: "", category: "Напитки" });
   const [newCustomExpense, setNewCustomExpense] = useState({ label: "", amount: "" });
-  const [importDate, setImportDate] = useState(todayIso());
-  const [importMode, setImportMode] = useState<ImportMode>("merge");
-  const [editingPointId, setEditingPointId] = useState<string | null>(null);
-  const [editingDriverId, setEditingDriverId] = useState<string | null>(null);
-  const [exportOptions, setExportOptions] = useState<ExportOptions>({
-    scope: "day",
-    pointScope: "all",
-    format: "template",
-    date: todayIso(),
-    startDate: todayIso(),
-    endDate: todayIso(),
-    pointId: "jvc"
-  });
+  const [productAdminSearch, setProductAdminSearch] = useState("");
   const [transferForm, setTransferForm] = useState({
     fromPointId: "jvc",
     toPointId: "business-bay",
@@ -293,6 +277,9 @@ export default function Home() {
     comment: ""
   });
 
+  const quickInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
   useEffect(() => {
     const loaded = loadState();
     const firstPoint = loaded.points.find((point) => point.active)?.id ?? "jvc";
@@ -300,12 +287,12 @@ export default function Home() {
     setState(loaded);
     setSelectedPointId(firstPoint);
     setSelectedDriverId(firstDriver);
-    setExportOptions((current) => ({ ...current, pointId: firstPoint }));
+    setNewDriver((current) => ({ ...current, pointId: firstPoint }));
     setTransferForm((current) => ({
       ...current,
       fromPointId: firstPoint,
       toPointId: loaded.points.find((point) => point.active && point.id !== firstPoint)?.id ?? firstPoint,
-      productId: loaded.products.find((product) => product.active)?.id ?? current.productId
+      productId: loaded.products.find((product) => product.active && (!product.pointIds || product.pointIds.includes(firstPoint)))?.id ?? current.productId
     }));
     setHydrated(true);
   }, []);
@@ -338,45 +325,183 @@ export default function Home() {
     [selectedDate, selectedDriverId, selectedPointId, state]
   );
   const reportLines = useMemo(() => calculateReportLines(state, currentReport), [currentReport, state]);
+  const inventoryLines = useMemo(() => [...reportLines].sort((a, b) => a.rowNumber - b.rowNumber), [reportLines]);
   const revenue = useMemo(() => calculateReportRevenue(state, currentReport), [currentReport, state]);
   const cashColumns = useMemo(() => calculateCashColumns(currentReport), [currentReport]);
   const cashTotal = useMemo(() => calculateCashTotal(currentReport), [currentReport]);
-  const revenueDiff = useMemo(() => money(cashTotal.productRevenue - revenue), [cashTotal.productRevenue, revenue]);
-  const revenueDiffOk = Math.abs(revenueDiff) < 0.01;
-  const selectedPoint = state.points.find((point) => point.id === selectedPointId);
-  const canEditReport = !currentReport.closed;
-  const filledCount = reportLines.filter((line) => typeof line.homeRest === "number").length;
-  const missingCount = reportLines.length - filledCount;
-  const problemCount = countProblems(reportLines);
+  const dashboard = useMemo(() => calculateDashboard(state, selectedDate), [selectedDate, state]);
   const reportWarningList = useMemo(() => getReportWarnings(state, currentReport), [currentReport, state]);
   const errorWarningCount = reportWarningList.filter((warning) => warning.severity === "error").length;
-  const warnWarningCount = reportWarningList.filter((warning) => warning.severity === "warn").length;
-  const requestTotal = reportLines.reduce((total, line) => total + line.request, 0);
-  const filteredLines = reportLines.filter((line) => line.product.name.toLowerCase().includes(search.toLowerCase()));
+  const selectedPoint = state.points.find((point) => point.id === selectedPointId);
+  const canEditReport = !currentReport.closed;
+  const filledCount = inventoryLines.filter((line) => typeof line.homeRest === "number").length;
+  const missingCount = Math.max(inventoryLines.length - filledCount, 0);
+  const problemCount = countProblems(inventoryLines);
+  const progressPercent = inventoryLines.length ? Math.round((filledCount / inventoryLines.length) * 100) : 0;
   const visibleCashColumns = cashColumns.filter((cash) => cash.driverName || hasCashValues(cash));
   const cashColumnKeys = (visibleCashColumns.length ? visibleCashColumns : cashColumns.filter((cash) => cash.columnKey === "F")).map(
     (cash) => (cash.columnKey ?? "F") as CashColumnKey
   );
   const selectedCashInput = currentReport.cashColumns?.[selectedCashColumn] ?? emptyCash(selectedCashColumn);
   const selectedCash = useMemo(() => calculateCash(selectedCashInput), [selectedCashInput]);
+  const filledLines = useMemo(() => inventoryLines.filter((line) => typeof line.homeRest === "number"), [inventoryLines]);
+  const missingLines = useMemo(() => inventoryLines.filter((line) => typeof line.homeRest !== "number"), [inventoryLines]);
 
-  const pointSummaries = useMemo(
+  const favoriteLines = useMemo(
     () =>
-      state.points
-        .filter((point) => point.active)
-        .map((point) => {
-          const report = getReport(state, selectedDate, point.id) ?? createEmptyReport(selectedDate, point.id, "", state.products);
-          return {
-            point,
-            revenue: calculateReportRevenue(state, report),
-            cash: calculateCashTotal(report),
-            report
-          };
-        }),
-    [selectedDate, state]
+      favoriteNeedles
+        .map((needle) => inventoryLines.find((line) => line.product.name.toUpperCase().includes(needle)))
+        .filter((line): line is ReportLine => Boolean(line)),
+    [inventoryLines]
   );
 
-  const dashboard = useMemo(() => calculateDashboard(state, selectedDate), [state, selectedDate]);
+  const categoryCards = useMemo(
+    () =>
+      categoryDefs.map((category) => {
+        const lines = inventoryLines.filter((line) => productMatchesCategory(line.product, category.id));
+        const filled = lines.filter((line) => typeof line.homeRest === "number").length;
+        return {
+          ...category,
+          total: lines.length,
+          filled,
+          missing: Math.max(lines.length - filled, 0)
+        };
+      }),
+    [inventoryLines]
+  );
+
+  const quickLines = useMemo(() => {
+    const lines = selectedCategory ? inventoryLines.filter((line) => productMatchesCategory(line.product, selectedCategory)) : inventoryLines;
+    return lines.length ? lines : inventoryLines;
+  }, [inventoryLines, selectedCategory]);
+
+  const quickLine = quickLines[quickIndex] ?? null;
+
+  const searchResults = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return [];
+    return inventoryLines
+      .filter((line) => line.product.name.toLowerCase().includes(query) || line.product.id.includes(query))
+      .slice(0, 12);
+  }, [inventoryLines, search]);
+
+  const receiptLines = useMemo(() => {
+    const query = receiptSearch.trim().toLowerCase();
+    return query
+      ? inventoryLines.filter((line) => line.product.name.toLowerCase().includes(query) || line.product.id.includes(query))
+      : inventoryLines;
+  }, [inventoryLines, receiptSearch]);
+
+  const transferProduct = state.products.find((product) => product.id === transferForm.productId);
+  const transferProductOptions = useMemo(() => {
+    const query = transferSearch.trim().toLowerCase();
+    const base = query
+      ? inventoryLines.filter((line) => line.product.name.toLowerCase().includes(query) || line.product.id.includes(query))
+      : [...favoriteLines, ...inventoryLines.filter((line) => line.product.id === transferForm.productId)];
+    return Array.from(new Map(base.map((line) => [line.product.id, line])).values()).slice(0, 8);
+  }, [favoriteLines, inventoryLines, transferForm.productId, transferSearch]);
+
+  const todaysTransfers = useMemo(
+    () => state.transfers.filter((transfer) => transfer.date === selectedDate),
+    [selectedDate, state.transfers]
+  );
+
+  const transferValue = useMemo(
+    () =>
+      todaysTransfers
+        .filter((transfer) => transfer.fromPointId === selectedPointId || transfer.toPointId === selectedPointId)
+        .reduce((total, transfer) => {
+          const product = state.products.find((item) => item.id === transfer.productId);
+          return total + transfer.quantity * (product?.price ?? 0);
+        }, 0),
+    [selectedPointId, state.products, todaysTransfers]
+  );
+
+  const financeTotals = useMemo(() => {
+    const columns = calculateCashColumns(currentReport);
+    const discounts = columns.reduce((total, cash) => total + cash.discounts, 0);
+    const expenses = columns.reduce(
+      (total, cash) =>
+        total +
+        cash.foodExpenses +
+        cash.fuel +
+        cash.kfc +
+        cash.forHome +
+        cash.carWash +
+        cash.tinting +
+        cash.otherExpenses +
+        (cash.customExpenses ?? []).reduce((sum, expense) => sum + expense.amount, 0),
+      0
+    );
+    return { discounts, expenses };
+  }, [currentReport]);
+
+  const analytics = useMemo(() => {
+    const weekStart = addDaysIso(selectedDate, -6);
+    const monthStart = `${selectedDate.slice(0, 7)}-01`;
+    const until = selectedDate;
+
+    const collect = (from: string) => {
+      const pointMap = new Map<string, { id: string; name: string; value: number }>();
+      const driverMap = new Map<string, { id: string; name: string; value: number; point: string }>();
+      let total = 0;
+
+      for (const report of state.reports) {
+        if (report.date < from || report.date > until) continue;
+        const point = state.points.find((item) => item.id === report.pointId);
+        const revenueValue = calculateReportRevenue(state, report);
+        total += revenueValue;
+
+        const pointEntry = pointMap.get(report.pointId) ?? { id: report.pointId, name: point?.name ?? report.pointId, value: 0 };
+        pointEntry.value += revenueValue;
+        pointMap.set(report.pointId, pointEntry);
+
+        for (const cash of calculateCashColumns(report)) {
+          if (!cash.driverName && !cash.productRevenue) continue;
+          const id = `${cash.driverName || cash.columnKey || "driver"}-${report.pointId}`;
+          const driverEntry = driverMap.get(id) ?? {
+            id,
+            name: cash.driverName || String(cash.columnKey ?? "Водитель"),
+            point: point?.name ?? report.pointId,
+            value: 0
+          };
+          driverEntry.value += cash.productRevenue;
+          driverMap.set(id, driverEntry);
+        }
+      }
+
+      return {
+        total,
+        points: Array.from(pointMap.values()).sort((a, b) => b.value - a.value),
+        drivers: Array.from(driverMap.values()).sort((a, b) => b.value - a.value)
+      };
+    };
+
+    return {
+      week: collect(weekStart),
+      month: collect(monthStart),
+      weekStart,
+      monthStart
+    };
+  }, [selectedDate, state]);
+
+  const carryoverAudit = useMemo(() => {
+    const previousDate = addDaysIso(selectedDate, -1);
+    const previousReport = getReport(state, previousDate, selectedPointId);
+    const currentPreviousRestCount = inventoryLines.filter((line) => typeof currentReport.items[line.product.id]?.previousRest === "number").length;
+    return {
+      previousDate,
+      previousClosed: Boolean(previousReport?.closed),
+      currentPreviousRestCount
+    };
+  }, [currentReport.items, inventoryLines, selectedDate, selectedPointId, state]);
+
+  const adminProducts = useMemo(() => {
+    const query = productAdminSearch.trim().toLowerCase();
+    return state.products
+      .filter((product) => !query || product.name.toLowerCase().includes(query) || product.id.includes(query))
+      .slice(0, 80);
+  }, [productAdminSearch, state.products]);
 
   useEffect(() => {
     const firstKey = cashColumnKeys[0] ?? "F";
@@ -384,6 +509,55 @@ export default function Home() {
       setSelectedCashColumn(firstKey);
     }
   }, [cashColumnKeys, selectedCashColumn]);
+
+  useEffect(() => {
+    if (quickIndex >= quickLines.length) setQuickIndex(Math.max(quickLines.length - 1, 0));
+  }, [quickIndex, quickLines.length]);
+
+  useEffect(() => {
+    if (activeTab !== "inventory" || inventoryView !== "quick") return;
+    const id = window.setTimeout(() => {
+      quickInputRef.current?.focus();
+      quickInputRef.current?.select();
+    }, 80);
+    return () => window.clearTimeout(id);
+  }, [activeTab, inventoryView, quickIndex, quickLine?.product.id]);
+
+  useEffect(() => {
+    if (!scannerOpen) return;
+
+    let stream: MediaStream | null = null;
+    let timer: number | undefined;
+    let stopped = false;
+
+    async function startScanner() {
+      const BarcodeDetectorCtor = (window as unknown as { BarcodeDetector?: new (options?: unknown) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> } }).BarcodeDetector;
+      if (!navigator.mediaDevices?.getUserMedia || !BarcodeDetectorCtor || !videoRef.current) return;
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        if (stopped || !videoRef.current) return;
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        const detector = new BarcodeDetectorCtor({ formats: ["ean_13", "ean_8", "code_128", "qr_code"] });
+        timer = window.setInterval(async () => {
+          if (!videoRef.current) return;
+          const codes = await detector.detect(videoRef.current).catch(() => []);
+          const code = codes[0]?.rawValue;
+          if (code) handleScanValue(code);
+        }, 650);
+      } catch {
+        setNotice("Камера недоступна. Введите код или название товара вручную.");
+      }
+    }
+
+    void startScanner();
+    return () => {
+      stopped = true;
+      if (timer) window.clearInterval(timer);
+      stream?.getTracks().forEach((track) => track.stop());
+    };
+  }, [scannerOpen]);
 
   function updateReport(mutator: (report: DailyReport) => DailyReport) {
     setState((current) => {
@@ -410,11 +584,6 @@ export default function Home() {
         }
       }
     }));
-  }
-
-  function getManualMovement(productId: string) {
-    const item = currentReport.items[productId];
-    return Number(item?.movement) || 0;
   }
 
   function updateCash(field: keyof CashInput, value: number | string) {
@@ -452,30 +621,267 @@ export default function Home() {
   }
 
   function addCustomExpense() {
-    if (!newCustomExpense.label.trim() || !newCustomExpense.amount) return;
+    if (!newCustomExpense.label.trim() || !newCustomExpense.amount.trim()) return;
     const expense: CustomExpense = {
       id: makeId(),
       label: newCustomExpense.label.trim(),
-      amount: Number(newCustomExpense.amount)
+      amount: parseNumber(newCustomExpense.amount)
     };
-    const current = selectedCashInput.customExpenses ?? [];
-    updateCashCustomExpenses([...current, expense]);
+    updateCashCustomExpenses([...(selectedCashInput.customExpenses ?? []), expense]);
     setNewCustomExpense({ label: "", amount: "" });
   }
 
   function removeCustomExpense(id: string) {
-    const current = selectedCashInput.customExpenses ?? [];
-    updateCashCustomExpenses(current.filter((e) => e.id !== id));
+    updateCashCustomExpenses((selectedCashInput.customExpenses ?? []).filter((expense) => expense.id !== id));
+  }
+
+  function addPoint() {
+    if (!newPointName.trim()) return;
+    const id = nextUniqueId(state.points, slugify(newPointName));
+    setState((current) => ({
+      ...current,
+      points: [...current.points, { id, name: newPointName.trim(), active: true }]
+    }));
+    setNewPointName("");
+  }
+
+  function updatePoint(pointId: string, patch: Partial<Point>) {
+    setState((current) => ({
+      ...current,
+      points: current.points.map((point) => (point.id === pointId ? { ...point, ...patch } : point))
+    }));
+  }
+
+  function removePoint(pointId: string) {
+    const hasHistory =
+      state.reports.some((report) => report.pointId === pointId) ||
+      state.transfers.some((transfer) => transfer.fromPointId === pointId || transfer.toPointId === pointId);
+
+    setState((current) => ({
+      ...current,
+      points: hasHistory ? current.points.map((point) => (point.id === pointId ? { ...point, active: false } : point)) : current.points.filter((point) => point.id !== pointId)
+    }));
+
+    if (selectedPointId === pointId) {
+      const nextPoint = state.points.find((point) => point.active && point.id !== pointId);
+      if (nextPoint) selectPoint(nextPoint.id);
+    }
+  }
+
+  function addDriver() {
+    if (!newDriver.name.trim()) return;
+    const id = nextUniqueId(state.drivers, slugify(newDriver.name));
+    const driver: Driver = { id, name: newDriver.name.trim(), pointId: newDriver.pointId, active: true };
+    setState((current) => {
+      const nextReports = current.reports.map((report) => {
+        if (report.pointId !== driver.pointId || report.closed) return report;
+        const emptyColumn = (["F", "G", "H", "I", "J", "K"] as CashColumnKey[]).find((columnKey) => !report.cashColumns[columnKey]?.driverName);
+        if (!emptyColumn) return report;
+        return {
+          ...report,
+          cashColumns: {
+            ...report.cashColumns,
+            [emptyColumn]: emptyCash(emptyColumn, driver.name)
+          }
+        };
+      });
+      return { ...current, drivers: [...current.drivers, driver], reports: nextReports };
+    });
+    setNewDriver((current) => ({ ...current, name: "" }));
+  }
+
+  function updateDriver(driverId: string, patch: Partial<Driver>) {
+    setState((current) => ({
+      ...current,
+      drivers: current.drivers.map((driver) => (driver.id === driverId ? { ...driver, ...patch } : driver))
+    }));
+  }
+
+  function removeDriver(driverId: string) {
+    const hasHistory = state.reports.some((report) => report.driverId === driverId);
+    setState((current) => ({
+      ...current,
+      drivers: hasHistory ? current.drivers.map((driver) => (driver.id === driverId ? { ...driver, active: false } : driver)) : current.drivers.filter((driver) => driver.id !== driverId)
+    }));
+  }
+
+  function addProduct() {
+    if (!newProduct.name.trim()) return;
+    const id = nextUniqueId(state.products, slugify(newProduct.name));
+    const product: Product = {
+      id,
+      name: newProduct.name.trim(),
+      price: parseNumber(newProduct.price),
+      norm: parseNumber(newProduct.norm),
+      category: newProduct.category.trim() || "Напитки",
+      active: true
+    };
+    setState((current) => ({ ...current, products: [...current.products, product] }));
+    setNewProduct({ name: "", price: "", norm: "", category: "Напитки" });
+  }
+
+  function updateProduct(productId: string, patch: Partial<Product>) {
+    setState((current) => ({
+      ...current,
+      products: current.products.map((product) => (product.id === productId ? { ...product, ...patch } : product))
+    }));
+  }
+
+  function removeProduct(productId: string) {
+    const hasHistory = state.reports.some((report) => Boolean(report.items[productId]));
+    setState((current) => ({
+      ...current,
+      products: hasHistory
+        ? current.products.map((product) => (product.id === productId ? { ...product, active: false } : product))
+        : current.products.filter((product) => product.id !== productId)
+    }));
   }
 
   function selectPoint(pointId: string) {
     const driver = state.drivers.find((item) => item.pointId === pointId && item.active);
     setSelectedPointId(pointId);
     setSelectedDriverId(driver?.id ?? selectedDriverId);
-    setExportOptions((current) => ({ ...current, pointId }));
+    setSelectedCategory(null);
+    setQuickIndex(0);
+    setTransferForm((current) => ({
+      ...current,
+      fromPointId: pointId,
+      toPointId: state.points.find((point) => point.active && point.id !== pointId)?.id ?? pointId
+    }));
+  }
+
+  function startQuick(productId?: string, categoryId?: CategoryId | null) {
+    const category = categoryId === undefined ? selectedCategory : categoryId;
+    const lines = category ? inventoryLines.filter((line) => productMatchesCategory(line.product, category)) : inventoryLines;
+    const fallbackIndex = lines.findIndex((line) => typeof line.homeRest !== "number");
+    const productIndex = productId ? lines.findIndex((line) => line.product.id === productId) : -1;
+    setSelectedCategory(category ?? null);
+    setQuickIndex(productIndex >= 0 ? productIndex : Math.max(fallbackIndex, 0));
+    setInventoryView("quick");
+    setActiveTab("inventory");
+  }
+
+  function continueFill() {
+    if (missingCount === 0) {
+      setActiveTab("more");
+      return;
+    }
+    startQuick(undefined, null);
+  }
+
+  function saveQuickValue(value: string) {
+    if (!quickLine) return;
+    updateItem(quickLine.product.id, { homeRest: parseOptionalNumber(value) });
+  }
+
+  function adjustQuickRest(delta: number) {
+    if (!quickLine || !canEditReport) return;
+    const current = typeof quickLine.homeRest === "number" ? quickLine.homeRest : 0;
+    updateItem(quickLine.product.id, { homeRest: Math.max(0, parseNumber(String(current + delta))) });
+  }
+
+  function adjustIncoming(productId: string, currentValue: number, delta: number) {
+    if (!canEditReport) return;
+    updateItem(productId, { incoming: Math.max(0, parseNumber(String(currentValue + delta))) });
+  }
+
+  function goNext() {
+    if (quickIndex < quickLines.length - 1) {
+      setQuickIndex((current) => current + 1);
+      return;
+    }
+    setInventoryView("categories");
+    setNotice("Категория заполнена. Можно перейти к следующей.");
+  }
+
+  function goPrev() {
+    setQuickIndex((current) => Math.max(current - 1, 0));
+  }
+
+  function startVoice() {
+    if (!quickLine) return;
+    const speechWindow = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionConstructor;
+      webkitSpeechRecognition?: SpeechRecognitionConstructor;
+    };
+    const SpeechRecognitionCtor = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+
+    if (!SpeechRecognitionCtor) {
+      setNotice("Голосовой ввод не поддерживается в этом браузере.");
+      return;
+    }
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.lang = "ru-RU";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onstart = () => setVoiceActive(true);
+    recognition.onend = () => setVoiceActive(false);
+    recognition.onerror = () => {
+      setVoiceActive(false);
+      setNotice("Не удалось распознать голос.");
+    };
+    recognition.onresult = (event: SpeechRecognitionResultEventLike) => {
+      const transcript = event.results?.[0]?.[0]?.transcript ?? "";
+      const value = extractSpokenNumber(transcript);
+      if (typeof value !== "number") {
+        setNotice("Число не распознано.");
+        return;
+      }
+      updateItem(quickLine.product.id, { homeRest: value });
+      setNotice(`Остаток ${value} сохранен голосом.`);
+    };
+    recognition.start();
+  }
+
+  function handleScanValue(rawValue: string) {
+    const query = rawValue.trim().toLowerCase();
+    if (!query) return;
+    const match = inventoryLines.find((line) => {
+      const excelRows = Object.values(line.product.excelRowsByPoint ?? {}).map(String);
+      return (
+        line.product.id.toLowerCase() === query ||
+        line.product.id.toLowerCase().includes(query) ||
+        line.product.name.toLowerCase().includes(query) ||
+        String(line.rowNumber) === query ||
+        excelRows.includes(query)
+      );
+    });
+    if (!match) {
+      setNotice(`Товар по коду "${rawValue}" не найден.`);
+      return;
+    }
+    setScannerOpen(false);
+    setScannerQuery("");
+    startQuick(match.product.id, null);
+  }
+
+  function addTransfer() {
+    if (currentReport.closed) return;
+    if (transferForm.fromPointId === transferForm.toPointId || transferForm.quantity <= 0.001) {
+      setNotice("Проверьте точки и количество перемещения.");
+      return;
+    }
+    const transfer: Transfer = {
+      id: makeId(),
+      date: selectedDate,
+      ...transferForm,
+      quantity: Number(transferForm.quantity)
+    };
+    setState((current) => ({ ...current, transfers: [transfer, ...current.transfers] }));
+    setTransferForm((current) => ({ ...current, quantity: 1, comment: "" }));
+    setNotice("Перемещение сохранено.");
+  }
+
+  function removeTransfer(id: string) {
+    setState((current) => ({ ...current, transfers: current.transfers.filter((transfer) => transfer.id !== id) }));
   }
 
   function closeDay() {
+    if (missingCount > 0) {
+      setNotice(`Закрытие недоступно: осталось заполнить ${missingCount} товаров.`);
+      return;
+    }
     const result = canCloseReport(state, currentReport);
     if (!result.ok) {
       setNotice(`Нельзя закрыть: ${result.warnings.slice(0, 2).join("; ")}`);
@@ -503,1094 +909,1045 @@ export default function Home() {
     setNotice("Отчет снова открыт.");
   }
 
-  function addTransfer() {
-    if (currentReport.closed) return;
-    if (transferForm.fromPointId === transferForm.toPointId || transferForm.quantity <= 0.001) {
-      setNotice("Проверьте точки и количество перемещения.");
-      return;
-    }
-    const transfer: Transfer = {
-      id: makeId(),
-      date: selectedDate,
-      ...transferForm,
-      quantity: Number(transferForm.quantity)
-    };
-    setState((current) => ({ ...current, transfers: [transfer, ...current.transfers] }));
-    setTransferForm((current) => ({ ...current, quantity: 1, comment: "" }));
-    setNotice("Перемещение сохранено.");
-  }
-
-  function removeTransfer(id: string) {
-    setState((current) => ({ ...current, transfers: current.transfers.filter((transfer) => transfer.id !== id) }));
-  }
-
-  function addPoint() {
-    if (!newPointName.trim()) return;
-    const id = nextUniqueId(state.points, slugify(newPointName));
-    setState((current) => ({
-      ...current,
-      points: [...current.points, { id, name: newPointName.trim(), active: true }]
-    }));
-    setNewPointName("");
-  }
-
-  function updatePoint(pointId: string, patch: Partial<Point>) {
-    setState((current) => ({
-      ...current,
-      points: current.points.map((point) => (point.id === pointId ? { ...point, ...patch } : point))
-    }));
-  }
-
-  function removePoint(pointId: string) {
-    const hasReports = state.reports.some((report) => report.pointId === pointId);
-    if (hasReports) {
-      updatePoint(pointId, { active: false });
-      setNotice("Точка скрыта (есть сохранённые отчёты).");
-      return;
-    }
-    setState((current) => ({
-      ...current,
-      points: current.points.filter((point) => point.id !== pointId),
-      drivers: current.drivers.filter((driver) => driver.pointId !== pointId)
-    }));
-    if (selectedPointId === pointId) {
-      const next = state.points.find((point) => point.id !== pointId && point.active)?.id;
-      if (next) selectPoint(next);
-    }
-    setNotice("Точка удалена.");
-  }
-
-  function removeDriver(driverId: string) {
-    const usedInReports = state.reports.some((report) => report.driverId === driverId);
-    if (usedInReports) {
-      updateDriver(driverId, { active: false });
-      setNotice("Водитель деактивирован (есть в отчётах).");
-      return;
-    }
-    setState((current) => ({
-      ...current,
-      drivers: current.drivers.filter((driver) => driver.id !== driverId)
-    }));
-    setNotice("Водитель удалён.");
-  }
-
-  async function handleExcelImport(file: File) {
-    setNotice("Импортирую Excel...");
-    try {
-      const { state: importedState, result } = await importExcelReport(state, file, {
-        date: importDate,
-        mode: importMode
-      });
-      setState(importedState);
-      setSelectedDate(importDate);
-      setNotice(
-        `Импорт: создано ${result.createdReports}, обновлено ${result.updatedReports} за ${importDate}.` +
-          (result.skippedSheets.length ? ` Пропущены листы: ${result.skippedSheets.join(", ")}` : "")
-      );
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Ошибка импорта Excel");
-    }
-  }
-
-  function addProduct() {
-    if (!newProduct.name.trim()) return;
-    const id = nextUniqueId(state.products, slugify(newProduct.name));
-    const product: Product = {
-      id,
-      name: newProduct.name.trim(),
-      price: Number(newProduct.price) || 0,
-      norm: Number(newProduct.norm) || 0,
-      category: newProduct.category.trim() || "Напитки",
-      active: true
-    };
-    setState((current) => ({
-      ...current,
-      products: [...current.products, product],
-      reports: current.reports.map((report) => ({
-        ...report,
-        items: {
-          ...report.items,
-          [product.id]: { productId: product.id, incoming: 0, movement: 0, extraRequest: 0 }
-        }
-      }))
-    }));
-    setNewProduct({ name: "", price: 0, norm: 0, category: "Напитки" });
-  }
-
-  function updateProduct(productId: string, patch: Partial<Product>) {
-    setState((current) => ({
-      ...current,
-      products: current.products.map((product) => (product.id === productId ? { ...product, ...patch } : product))
-    }));
-  }
-
-  function addDriver() {
-    if (!newDriver.name.trim()) return;
-    const id = nextUniqueId(state.drivers, slugify(newDriver.name));
-    const driver: Driver = {
-      id,
-      name: newDriver.name.trim(),
-      pointId: newDriver.pointId,
-      active: true
-    };
-    setState((current) => ({ ...current, drivers: [...current.drivers, driver] }));
-    setNewDriver({ name: "", pointId: selectedPointId });
-    setNotice(`Водитель ${driver.name} добавлен.`);
-  }
-
-  function updateDriver(driverId: string, patch: Partial<Driver>) {
-    setState((current) => ({
-      ...current,
-      drivers: current.drivers.map((driver) => (driver.id === driverId ? { ...driver, ...patch } : driver))
-    }));
-  }
-
   async function exportExcel(pointScope: ExportOptions["pointScope"] = "single") {
-    setNotice("Готовлю Excel...");
-    setPreparedDownload(null);
     try {
+      if (preparedDownload) URL.revokeObjectURL(preparedDownload.url);
       const file = await createExcelReportFile(state, {
-        ...exportOptions,
         scope: "day",
         pointScope,
+        format: "modern",
         date: selectedDate,
+        startDate: selectedDate,
+        endDate: selectedDate,
         pointId: selectedPointId
       });
-      setPreparedDownload({
-        url: URL.createObjectURL(file.blob),
-        fileName: file.fileName
-      });
-      setNotice("Excel готов. Нажмите «Скачать готовый Excel».");
+      const url = URL.createObjectURL(file.blob);
+      setPreparedDownload({ url, fileName: file.fileName });
+      setNotice("Отчет подготовлен.");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Не удалось подготовить Excel");
+      setNotice(error instanceof Error ? error.message : "Не удалось подготовить отчет.");
     }
   }
 
-  async function exportAdvanced() {
-    setNotice("Готовлю Excel...");
-    setPreparedDownload(null);
-    try {
-      const file = await createExcelReportFile(state, exportOptions);
-      setPreparedDownload({
-        url: URL.createObjectURL(file.blob),
-        fileName: file.fileName
-      });
-      setNotice("Excel готов. Нажмите «Скачать готовый Excel».");
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Не удалось подготовить Excel");
-    }
-  }
-
-  const pointDrivers = state.drivers.filter((d) => d.pointId === selectedPointId);
+  const closeDisabled = currentReport.closed || missingCount > 0 || errorWarningCount > 0;
+  const quickTone = quickLine ? lineTone(quickLine) : "empty";
 
   return (
     <main className="app-shell">
-      {/* ─── TOPBAR ─── */}
-      <header className="topbar">
-        <div className="topbar-left">
-          <p className="eyebrow">Ежедневный отчет</p>
+      <header className="app-header">
+        <div>
+          <span className="overline">Ежедневное закрытие</span>
           <h1>{selectedPoint?.name ?? "Точка"}</h1>
-          <div className="topbar-date-row">
-            <input
-              type="date"
-              className="date-input-inline"
-              value={selectedDate}
-              onChange={(e) => {
-                setSelectedDate(e.target.value);
-                setExportOptions((cur) => ({ ...cur, date: e.target.value, startDate: e.target.value, endDate: e.target.value }));
-              }}
-            />
-            <span className={`status-badge ${currentReport.closed ? "locked" : "open"}`}>
-              {currentReport.closed ? <Lock size={13} /> : <CheckCircle2 size={13} />}
-              {currentReport.closed ? "Закрыт" : "Открыт"}
-            </span>
-            <span className="status-badge save-badge">
-              <Save size={13} />
-              {lastSaved ? lastSaved : "—"}
-            </span>
-          </div>
         </div>
-        <div className="topbar-actions">
-          <button className="btn-close-day" onClick={closeDay} disabled={currentReport.closed}>
-            <Lock size={16} /> Закрыть день
-          </button>
-          {currentReport.closed && (
-            <button className="btn-secondary" onClick={reopenDay}>
-              Открыть
-            </button>
-          )}
-        </div>
+        <input
+          className="date-control"
+          type="date"
+          value={selectedDate}
+          onChange={(event) => setSelectedDate(event.target.value)}
+          aria-label="Дата"
+        />
       </header>
 
-      {/* ─── POINT RAIL ─── */}
-      <section className="point-rail" aria-label="Точки">
-        {pointSummaries.map(({ point, revenue: pointRevenue, cash }) => (
-          <button key={point.id} className={point.id === selectedPointId ? "active" : ""} onClick={() => selectPoint(point.id)} type="button">
-            <strong>{point.name}</strong>
-            <span>{currency(pointRevenue)}</span>
-            {cash.shortageOrPlus < 0 && <b className="shortage">{currency(cash.shortageOrPlus)}</b>}
-          </button>
-        ))}
+      <section className="point-strip" aria-label="Точки">
+        {state.points
+          .filter((point) => point.active)
+          .map((point) => (
+            <button
+              type="button"
+              key={point.id}
+              className={point.id === selectedPointId ? "active" : ""}
+              onClick={() => selectPoint(point.id)}
+            >
+              {point.name}
+            </button>
+          ))}
       </section>
 
-      {/* ─── QUICK METRICS ─── */}
-      <section className="quick-total" aria-label="Итоги точки">
-        <Metric label="Выручка" value={currency(revenue)} tone="green" icon="💰" />
-        <Metric label="Водители" value={currency(cashTotal.productRevenue)} tone={revenueDiffOk ? "blue" : "red"} icon="🧾" />
-        <Metric label="Заявка" value={requestTotal.toLocaleString("ru-RU")} tone="amber" icon="📋" />
-        <Metric label="Сдали" value={currency(cashTotal.handedOver)} tone="blue" icon="💵" />
-        <Metric label="Недостача" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "red" : "green"} icon={cashTotal.shortageOrPlus < 0 ? "⚠️" : "✅"} />
-      </section>
-
-      {/* ─── NOTICE ─── */}
       {notice && (
-        <div className="notice">
+        <section className="notice">
           <span>{notice}</span>
           {preparedDownload && (
-            <a
-              className="notice-download"
-              href={preparedDownload.url}
-              download={preparedDownload.fileName}
-              onClick={() => setNotice("Excel скачивается.")}
-            >
-              Скачать готовый Excel
+            <a href={preparedDownload.url} download={preparedDownload.fileName}>
+              Скачать
             </a>
           )}
-          <button onClick={() => setNotice("")} aria-label="Закрыть уведомление">
+          <button type="button" onClick={() => setNotice("")} aria-label="Закрыть уведомление">
             <X size={16} />
           </button>
-        </div>
-      )}
-
-      {/* ─── WARNINGS ─── */}
-      {(missingCount > 0 || problemCount > 0 || warnWarningCount > 0) && (
-        <section className={`soft-warning ${errorWarningCount > 0 ? "critical" : ""}`}>
-          <AlertTriangle size={16} />
-          <span>{missingCount > 0 ? `Не заполнено: ${missingCount}` : "Остатки заполнены"}</span>
-          {errorWarningCount > 0 && <b className="warn-error">Ошибки: {errorWarningCount}</b>}
-          {warnWarningCount > 0 && <b className="warn-soft">Проверить: {warnWarningCount}</b>}
         </section>
       )}
 
-      {/* ─── TAB NAVIGATION ─── */}
-      <nav className="tab-nav" aria-label="Разделы">
-        <button className={activeTab === "products" ? "active" : ""} onClick={() => setActiveTab("products")}>
-          <Package size={16} /> <span>Товары</span>
-          {(missingCount > 0 || problemCount > 0) && <span className="tab-badge">{missingCount + problemCount}</span>}
-        </button>
-        <button className={activeTab === "cash" ? "active" : ""} onClick={() => setActiveTab("cash")}>
-          <WalletCards size={16} /> <span>Касса</span>
-          {cashTotal.shortageOrPlus < 0 && <span className="tab-badge red">{visibleCashColumns.length}</span>}
-        </button>
-        <button className={activeTab === "transfers" ? "active" : ""} onClick={() => setActiveTab("transfers")}>
-          <Truck size={16} /> <span>Перемещения</span>
-          {state.transfers.filter((t) => t.date === selectedDate).length > 0 && (
-            <span className="tab-badge blue">{state.transfers.filter((t) => t.date === selectedDate).length}</span>
-          )}
-        </button>
-        <button className={activeTab === "stats" ? "active" : ""} onClick={() => setActiveTab("stats")}>
-          <BarChart3 size={16} /> <span>Статистика</span>
-        </button>
-        <button className={activeTab === "settings" ? "active" : ""} onClick={() => setActiveTab("settings")}>
-          <Settings size={16} /> <span>Настройки</span>
-        </button>
-      </nav>
-
-      {/* ════════════════════════════════
-          TAB: ТОВАРЫ
-      ════════════════════════════════ */}
-      {activeTab === "products" && (
-        <section className="work-card" id="products">
-          <div className="section-head">
+      {activeTab === "home" && (
+        <section className="screen home-screen">
+          <button type="button" className="hero-progress" onClick={() => setProgressOpen(true)}>
             <div>
-              <h2>Товары</h2>
-              <p>{filledCount}/{reportLines.length} заполнено</p>
+              <span className="overline">Заполнено</span>
+              <strong>
+                {filledCount} / {inventoryLines.length}
+              </strong>
             </div>
-            <label className="search-box">
-              <Search size={16} />
-              <input placeholder="Поиск товара..." value={search} onChange={(e) => setSearch(e.target.value)} />
-            </label>
+            <div className="progress-ring" style={{ "--progress": `${progressPercent}%` } as CSSProperties}>
+              <span>{progressPercent}%</span>
+            </div>
+          </button>
+
+          <div className="home-metrics">
+            <Metric label="Осталось" value={`${missingCount} товаров`} tone={missingCount ? "warn" : "good"} />
+            <Metric label="Выручка" value={currency(revenue)} tone="neutral" />
+            <Metric label="Сдали" value={currency(cashTotal.handedOver)} tone="neutral" />
+            <Metric label="Недостача" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
           </div>
 
-          <div className="product-table-wrap">
-            <div className="product-table">
-              <div className="product-table-head product-grid">
-                <span>#</span>
-                <span>Товар</span>
-                <span>Было</span>
-                <span>Приход</span>
-                <span>Перем.</span>
-                <span>Остаток</span>
-                <span>Продажа</span>
-                <span>Сумма</span>
-                <span>Доп</span>
-                <span>Тек.</span>
-              </div>
-            {filteredLines.map((line) => {
-              const transferMovement = getTransferMovement(state, selectedDate, selectedPointId, line.product.id);
-              const manualMovement = getManualMovement(line.product.id);
-              const hasError = line.warnings.some((w) => w.severity === "error");
-              const hasWarn = line.warnings.some((w) => w.severity === "warn");
-              return (
-                <article
-                  className={`product-row product-grid ${hasError ? "has-error" : hasWarn ? "has-warning" : ""} ${typeof line.homeRest !== "number" ? "unfilled" : ""}`}
-                  key={line.product.id}
-                  title={line.warnings.map((w) => w.message).join(" · ")}
-                >
-                  <span className="col-num">{line.rowNumber}</span>
-                  <div className="col-name">
-                    <strong>{line.product.name}</strong>
-                    {line.warnings.length > 0 && (
-                      <span className="row-warning-hint">{line.warnings[0]?.message}</span>
-                    )}
-                  </div>
-                  <span className="col-prev">{line.previousRest}</span>
-                  <QuantityInput
-                    ariaLabel="Приход"
-                    value={line.incoming}
-                    disabled={!canEditReport}
-                    navGroup="incoming"
-                    onChange={(value) => updateItem(line.product.id, { incoming: value ?? 0 })}
-                  />
-                  <QuantityInput
-                    ariaLabel="Перемещение"
-                    value={manualMovement + transferMovement}
-                    disabled={!canEditReport}
-                    className="col-movement"
-                    min={null}
-                    navGroup="movement"
-                    onChange={(value) =>
-                      updateItem(line.product.id, {
-                        movement: (value ?? 0) - transferMovement
-                      })
-                    }
-                    hint={
-                      transferMovement !== 0 ? (
-                        <span className="transfer-hint">авто {transferMovement > 0 ? "+" : ""}{transferMovement}</span>
-                      ) : undefined
-                    }
-                  />
-                  <QuantityInput
-                    ariaLabel="Остаток дома"
-                    value={line.homeRest}
-                    placeholder="—"
-                    disabled={!canEditReport}
-                    optional
-                    className="col-rest"
-                    navGroup="home-rest"
-                    onChange={(value) => updateItem(line.product.id, { homeRest: value })}
-                  />
-                  <span className={`col-sale sale-chip ${line.sale < 0 ? "bad" : ""}`}>{formatDecimal(line.sale)}</span>
-                  <span className="col-amount">{currency(line.amount)}</span>
-                  <QuantityInput
-                    ariaLabel="Доп. заявка"
-                    value={line.extraRequest}
-                    disabled={!canEditReport}
-                    navGroup="extra-request"
-                    onChange={(value) => updateItem(line.product.id, { extraRequest: value ?? 0 })}
-                  />
-                  <QuantityInput
-                    ariaLabel="Тек. остаток"
-                    value={line.currentRest}
-                    placeholder="—"
-                    disabled={!canEditReport}
-                    optional
-                    navGroup="current-rest"
-                    onChange={(value) => updateItem(line.product.id, { currentRest: value })}
-                  />
-                </article>
-              );
-            })}
+          <button type="button" className="primary-cta" onClick={continueFill}>
+            {missingCount === 0 ? <CheckCircle2 size={20} /> : <ArrowRight size={20} />}
+            {missingCount === 0 ? "Открыть закрытие дня" : "Продолжить заполнение"}
+          </button>
+
+          <div className="quiet-panel">
+            <div>
+              <span className="overline">Сегодня все точки</span>
+              <strong>{currency(dashboard.daySales)}</strong>
             </div>
+            <BarChart3 size={22} />
           </div>
         </section>
       )}
 
-      {/* ════════════════════════════════
-          TAB: КАССА
-      ════════════════════════════════ */}
-      {activeTab === "cash" && (
-        <section className="work-card cash-section" id="cash">
-          <div className="section-head">
-            <div>
-              <h2>Касса водителей</h2>
-              <p>Итог точки: <span className={cashTotal.shortageOrPlus < 0 ? "text-red" : "text-green"}>{currency(cashTotal.shortageOrPlus)}</span></p>
-            </div>
-            <WalletCards size={22} className="section-icon" />
-          </div>
-
-          {/* Вкладки водителей */}
-          <div className="driver-tabs">
-            {visibleCashColumns.map((cash) => {
-              const columnKey = (cash.columnKey ?? "F") as CashColumnKey;
-              return (
-                <button
-                  key={columnKey}
-                  className={`driver-tab ${selectedCashColumn === columnKey ? "active" : ""} ${cash.shortageOrPlus < 0 ? "bad" : ""}`}
-                  onClick={() => setSelectedCashColumn(columnKey)}
-                  type="button"
-                >
-                  <span className="driver-tab-name">{cash.driverName || columnKey}</span>
-                  <span className="driver-tab-rev">{currency(cash.productRevenue)}</span>
-                  <span className={`driver-tab-bal ${cash.shortageOrPlus < 0 ? "bad" : "good"}`}>
-                    {currency(cash.shortageOrPlus)}
-                  </span>
+      {activeTab === "inventory" && (
+        <section className="screen inventory-screen">
+          {inventoryView === "categories" && (
+            <>
+              <div className="screen-head">
+                <div>
+                  <span className="overline">Инвентаризация</span>
+                  <h2>Выберите категорию</h2>
+                </div>
+                <button type="button" className="icon-button" onClick={() => setScannerOpen(true)} aria-label="Сканировать штрих-код">
+                  <ScanLine size={20} />
                 </button>
-              );
-            })}
-          </div>
+              </div>
 
-          {/* Редактор кассы */}
-          <div className="cash-editor-card">
-            <div className="cash-main-fields">
-              <label>
-                Водитель
+              <div className="view-switch" aria-label="Вид инвентаризации">
+                <button type="button" className="active" onClick={() => setInventoryView("categories")}>
+                  Категории
+                </button>
+                <button type="button" onClick={() => setInventoryView("list")}>
+                  Список
+                </button>
+              </div>
+
+              <label className="search-field">
+                <Search size={18} />
                 <input
-                  value={selectedCash.driverName}
-                  disabled={!canEditReport}
-                  onChange={(e) => updateCash("driverName", e.target.value)}
-                  placeholder="Имя водителя"
-                  list="drivers-datalist"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Поиск товара"
+                  aria-label="Поиск товара"
                 />
-                <datalist id="drivers-datalist">
-                  {pointDrivers.map((d) => (
-                    <option key={d.id} value={d.name} />
+              </label>
+
+              {search ? (
+                <div className="search-results">
+                  {searchResults.map((line) => (
+                    <ProductPickButton key={line.product.id} line={line} onClick={() => startQuick(line.product.id, null)} />
                   ))}
-                </datalist>
-              </label>
-              <label>
-                Выручка (товары)
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={num(selectedCash.productRevenue)}
-                  disabled={!canEditReport}
-                  onChange={(e) => updateCash("productRevenue", parseNumber(e.target.value))}
-                />
-              </label>
-              <label>
-                Сдал наличных
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={num(selectedCash.handedOver)}
-                  disabled={!canEditReport}
-                  onChange={(e) => updateCash("handedOver", parseNumber(e.target.value))}
-                />
-              </label>
-              <div className="cash-result-pills">
-                <div className="result-pill">
-                  <span>Должен сдать</span>
-                  <strong>{currency(selectedCash.shouldHandOver)}</strong>
+                  {searchResults.length === 0 && <div className="empty-state">Ничего не найдено</div>}
                 </div>
-                <div className={`result-pill ${selectedCash.shortageOrPlus < 0 ? "bad" : "good"}`}>
-                  <span>Недостача / плюс</span>
-                  <strong>{currency(selectedCash.shortageOrPlus)}</strong>
-                </div>
-                <div className={`result-pill ${revenueDiffOk ? "good" : "bad"}`}>
-                  <span>Водители − товары</span>
-                  <strong>{currency(revenueDiff)}</strong>
-                </div>
-              </div>
-            </div>
-
-            {/* Расходы и долги */}
-            <details className="expenses-fold">
-              <summary>
-                <Receipt size={15} /> Расходы и долги
-                <ChevronDown size={14} />
-              </summary>
-              <div className="cash-expense-grid">
-                {cashFields.map(([field, label]) => (
-                  <label key={field}>
-                    {label}
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      value={num(Number(selectedCash[field]))}
-                      disabled={!canEditReport}
-                      onChange={(e) => updateCash(field, parseNumber(e.target.value))}
-                    />
-                  </label>
-                ))}
-              </div>
-
-              {/* Кастомные расходы */}
-              <div className="custom-expenses">
-                <div className="custom-expenses-head">
-                  <strong>Дополнительные расходы</strong>
-                </div>
-                {(selectedCashInput.customExpenses ?? []).map((expense) => (
-                  <div className="custom-expense-row" key={expense.id}>
-                    <span>{expense.label}</span>
-                    <strong>{currency(expense.amount)}</strong>
-                    {canEditReport && (
-                      <button onClick={() => removeCustomExpense(expense.id)} aria-label="Удалить расход">
-                        <X size={14} />
+              ) : (
+                <>
+                  <div className="favorite-row" aria-label="Избранные товары">
+                    {favoriteLines.map((line) => (
+                      <button type="button" key={line.product.id} onClick={() => startQuick(line.product.id, null)}>
+                        <Star size={14} />
+                        <span>{line.product.name.replace(/\s+(LTR|1 LTR|75CL|33CL|BTL|CANS?).*$/i, "")}</span>
                       </button>
-                    )}
+                    ))}
+                  </div>
+
+                  <div className="category-grid">
+                    {categoryCards.map((category) => (
+                      <button type="button" className="category-card" key={category.id} onClick={() => startQuick(undefined, category.id)}>
+                        <span className="category-icon">{category.icon}</span>
+                        <span className="category-title">{category.title}</span>
+                        <span className={category.missing ? "category-status warn" : "category-status done"}>
+                          {category.filled} / {category.total}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+
+          {inventoryView === "list" && (
+            <>
+              <div className="screen-head">
+                <div>
+                  <span className="overline">Инвентаризация</span>
+                  <h2>Все товары</h2>
+                </div>
+                <button type="button" className="icon-button" onClick={() => setScannerOpen(true)} aria-label="Сканировать штрих-код">
+                  <ScanLine size={20} />
+                </button>
+              </div>
+
+              <div className="view-switch" aria-label="Вид инвентаризации">
+                <button type="button" onClick={() => setInventoryView("categories")}>
+                  Категории
+                </button>
+                <button type="button" className="active" onClick={() => setInventoryView("list")}>
+                  Список
+                </button>
+              </div>
+
+              <label className="search-field">
+                <Search size={18} />
+                <input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Поиск товара"
+                  aria-label="Поиск товара"
+                />
+              </label>
+
+              <div className="inventory-list">
+                {(search ? searchResults : inventoryLines).map((line) => (
+                  <div className={`inventory-list-row ${lineTone(line)}`} key={line.product.id}>
+                    <button type="button" onClick={() => startQuick(line.product.id, null)}>
+                      <span className={`dot ${lineTone(line)}`} />
+                      <strong>{line.rowNumber}. {line.product.name}</strong>
+                    </button>
+                    <span>{num(line.previousRest)}</span>
+                    <span>{num(line.incoming)}</span>
+                    <span>{typeof line.homeRest === "number" ? num(line.homeRest) : "—"}</span>
+                    <span>{typeof line.homeRest === "number" ? num(line.sale) : "—"}</span>
+                    <span>{typeof line.homeRest === "number" ? currency(line.amount) : "—"}</span>
                   </div>
                 ))}
-                {canEditReport && (
-                  <div className="custom-expense-form">
-                    <input
-                      placeholder="Название расхода"
-                      value={newCustomExpense.label}
-                      onChange={(e) => setNewCustomExpense((cur) => ({ ...cur, label: e.target.value }))}
-                    />
-                    <input
-                      type="number"
-                      placeholder="Сумма"
-                      value={newCustomExpense.amount}
-                      onChange={(e) => setNewCustomExpense((cur) => ({ ...cur, amount: e.target.value }))}
-                    />
-                    <button className="btn-add-expense" onClick={addCustomExpense}>
-                      <Plus size={16} />
+              </div>
+            </>
+          )}
+
+          {inventoryView === "quick" && (
+            <div className="quick-fill">
+              <div className="quick-top">
+                <button type="button" className="ghost-button" onClick={() => setInventoryView("categories")}>
+                  <ArrowLeft size={18} />
+                  Категории
+                </button>
+                <span>
+                  Товар {quickIndex + 1} из {quickLines.length}
+                </span>
+              </div>
+
+              {quickLine && (
+                <>
+                  <div className={`quick-product ${quickTone}`}>
+                    <div className="status-line">
+                      <span className={`dot ${quickTone}`} />
+                      {lineStatusText(quickLine)}
+                    </div>
+                    <h2>{quickLine.product.name}</h2>
+                    <div className="quick-facts">
+                      <div>
+                        <span>Было</span>
+                        <strong>{num(quickLine.previousRest)}</strong>
+                      </div>
+                      <div>
+                        <span>Доступно</span>
+                        <strong>{num(quickLine.available)}</strong>
+                      </div>
+                      <div>
+                        <span>Цена</span>
+                        <strong>{currency(quickLine.product.price)}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <label className="rest-input">
+                    <span>Введите остаток</span>
+                    <div className="rest-stepper">
+                      <button type="button" onClick={() => adjustQuickRest(-0.5)} disabled={!canEditReport} aria-label="Уменьшить остаток">
+                        <Minus size={20} />
+                      </button>
+                      <input
+                        ref={quickInputRef}
+                        inputMode="decimal"
+                        type="text"
+                        value={num(quickLine.homeRest)}
+                        onChange={(event) => saveQuickValue(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            goNext();
+                          }
+                          if (event.key === "ArrowUp") {
+                            event.preventDefault();
+                            adjustQuickRest(0.5);
+                          }
+                          if (event.key === "ArrowDown") {
+                            event.preventDefault();
+                            adjustQuickRest(-0.5);
+                          }
+                        }}
+                        disabled={!canEditReport}
+                        aria-label="Остаток товара"
+                      />
+                      <button type="button" onClick={() => adjustQuickRest(0.5)} disabled={!canEditReport} aria-label="Увеличить остаток">
+                        <Plus size={20} />
+                      </button>
+                    </div>
+                  </label>
+
+                  <div className="auto-calc">
+                    <div>
+                      <span>Продано</span>
+                      <strong>{typeof quickLine.homeRest === "number" ? num(quickLine.sale) : "—"}</strong>
+                    </div>
+                    <div>
+                      <span>Сумма</span>
+                      <strong>{typeof quickLine.homeRest === "number" ? currency(quickLine.amount) : "—"}</strong>
+                    </div>
+                  </div>
+
+                  {quickTone === "warn" && (
+                    <div className="warning-note">
+                      <AlertTriangle size={18} />
+                      Проверьте данные
+                    </div>
+                  )}
+
+                  <div className="quick-actions">
+                    <button type="button" className="secondary-action" onClick={goPrev} disabled={quickIndex === 0}>
+                      <ArrowLeft size={18} />
+                    </button>
+                    <button type="button" className={voiceActive ? "secondary-action active" : "secondary-action"} onClick={startVoice}>
+                      <Mic size={18} />
+                      Голос
+                    </button>
+                    <button type="button" className="primary-action" onClick={goNext}>
+                      Следующий
+                      <ArrowRight size={18} />
                     </button>
                   </div>
-                )}
-              </div>
-
-              <label className="wide mt-8">
-                Комментарий
-                <textarea
-                  value={selectedCash.comment}
-                  disabled={!canEditReport}
-                  onChange={(e) => updateCash("comment", e.target.value)}
-                />
-              </label>
-            </details>
-          </div>
+                </>
+              )}
+            </div>
+          )}
         </section>
       )}
 
-      {/* ════════════════════════════════
-          TAB: ПЕРЕМЕЩЕНИЯ
-      ════════════════════════════════ */}
       {activeTab === "transfers" && (
-        <section className="work-card" id="transfers">
-          <div className="section-head">
+        <section className="screen transfer-screen">
+          <div className="screen-head">
             <div>
-              <h2>Перемещения</h2>
-              <p>{state.transfers.filter((t) => t.date === selectedDate).length} за {selectedDate}</p>
+              <span className="overline">Перемещения</span>
+              <h2>Отдельно от продаж</h2>
             </div>
             <Truck size={22} />
           </div>
 
-          <div className="transfer-form">
-            <label>
-              Откуда
-              <select
-                value={transferForm.fromPointId}
-                disabled={!canEditReport}
-                onChange={(e) => setTransferForm((cur) => ({ ...cur, fromPointId: e.target.value }))}
-              >
-                {state.points.filter((p) => p.active).map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Куда
-              <select
-                value={transferForm.toPointId}
-                disabled={!canEditReport}
-                onChange={(e) => setTransferForm((cur) => ({ ...cur, toPointId: e.target.value }))}
-              >
-                {state.points.filter((p) => p.active).map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </label>
-            <label className="wide">
-              Товар
-              <select
-                value={transferForm.productId}
-                disabled={!canEditReport}
-                onChange={(e) => setTransferForm((cur) => ({ ...cur, productId: e.target.value }))}
-              >
-                {state.products.filter((p) => p.active).map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Количество
+          <div className="transfer-card">
+            <label className="search-field compact">
+              <Search size={17} />
               <input
-                type="text"
-                inputMode="decimal"
-                step="any"
-                value={num(transferForm.quantity)}
-                disabled={!canEditReport}
-                onChange={(e) => setTransferForm((cur) => ({ ...cur, quantity: parseNumber(e.target.value) }))}
+                value={transferSearch}
+                onChange={(event) => setTransferSearch(event.target.value)}
+                placeholder={transferProduct?.name ?? "Товар"}
+                aria-label="Найти товар для перемещения"
               />
             </label>
-            <label>
-              Комментарий
-              <input
-                value={transferForm.comment}
-                disabled={!canEditReport}
-                onChange={(e) => setTransferForm((cur) => ({ ...cur, comment: e.target.value }))}
-              />
-            </label>
-          </div>
-          <button className="btn-primary wide mt-10" onClick={addTransfer} disabled={!canEditReport}>
-            <Plus size={18} /> Добавить перемещение
-          </button>
 
-          <div className="transfer-list">
-            {state.transfers
-              .filter((t) => t.date === selectedDate)
-              .map((transfer) => {
-                const from = state.points.find((p) => p.id === transfer.fromPointId)?.name ?? transfer.fromPointId;
-                const to = state.points.find((p) => p.id === transfer.toPointId)?.name ?? transfer.toPointId;
-                const product = state.products.find((p) => p.id === transfer.productId)?.name ?? transfer.productId;
-                return (
-                  <div className="transfer-row" key={transfer.id}>
-                    <div className="transfer-info">
-                      <strong>{product}</strong>
-                      <span>{from} → {to} · кол-во: {transfer.quantity}</span>
-                      {transfer.comment && <span className="comment">{transfer.comment}</span>}
-                    </div>
-                    <button onClick={() => removeTransfer(transfer.id)} aria-label="Удалить">
-                      <Trash2 size={16} />
-                    </button>
+            <div className="transfer-options">
+              {transferProductOptions.map((line) => (
+                <button
+                  type="button"
+                  key={line.product.id}
+                  className={transferForm.productId === line.product.id ? "active" : ""}
+                  onClick={() => {
+                    setTransferForm((current) => ({ ...current, productId: line.product.id }));
+                    setTransferSearch("");
+                  }}
+                >
+                  {line.product.name}
+                </button>
+              ))}
+            </div>
+
+            <div className="transfer-stepper">
+              <span>Переместить</span>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setTransferForm((current) => ({ ...current, quantity: Math.max(0.5, current.quantity - 0.5) }))}
+                  aria-label="Уменьшить количество"
+                >
+                  <Minus size={18} />
+                </button>
+                <strong>{num(transferForm.quantity)}</strong>
+                <button
+                  type="button"
+                  onClick={() => setTransferForm((current) => ({ ...current, quantity: current.quantity + 0.5 }))}
+                  aria-label="Увеличить количество"
+                >
+                  <Plus size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="two-fields">
+              <label>
+                Откуда
+                <select
+                  value={transferForm.fromPointId}
+                  onChange={(event) => setTransferForm((current) => ({ ...current, fromPointId: event.target.value }))}
+                >
+                  {state.points.filter((point) => point.active).map((point) => (
+                    <option key={point.id} value={point.id}>
+                      {point.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Куда
+                <select
+                  value={transferForm.toPointId}
+                  onChange={(event) => setTransferForm((current) => ({ ...current, toPointId: event.target.value }))}
+                >
+                  {state.points.filter((point) => point.active).map((point) => (
+                    <option key={point.id} value={point.id}>
+                      {point.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <button type="button" className="primary-cta" onClick={addTransfer} disabled={!canEditReport}>
+              <Truck size={20} />
+              Переместить
+            </button>
+          </div>
+
+          <div className="compact-list">
+            {todaysTransfers.map((transfer) => {
+              const from = state.points.find((point) => point.id === transfer.fromPointId)?.name ?? transfer.fromPointId;
+              const to = state.points.find((point) => point.id === transfer.toPointId)?.name ?? transfer.toPointId;
+              const product = state.products.find((item) => item.id === transfer.productId)?.name ?? transfer.productId;
+              return (
+                <div className="movement-row" key={transfer.id}>
+                  <div>
+                    <strong>{product}</strong>
+                    <span>
+                      {from} → {to} · {transfer.quantity}
+                    </span>
                   </div>
-                );
-              })}
+                  <button type="button" onClick={() => removeTransfer(transfer.id)} aria-label="Удалить перемещение">
+                    <X size={16} />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
 
-      {/* ════════════════════════════════
-          TAB: СТАТИСТИКА
-      ════════════════════════════════ */}
-      {activeTab === "stats" && (
-        <section className="work-card stats-section" id="stats">
-          <div className="section-head">
+      {activeTab === "receipts" && (
+        <section className="screen receipts-screen">
+          <div className="screen-head">
             <div>
-              <h2>Статистика</h2>
-              <p>{selectedDate}</p>
+              <span className="overline">Приходы</span>
+              <h2>Поступления товара</h2>
             </div>
-            <TrendingUp size={22} />
+            <PackagePlus size={22} />
           </div>
 
-          {/* Основные метрики */}
-          <div className="stats-grid-4">
-            <StatCard label="Выручка за день" value={currency(dashboard.daySales)} color="green" icon="💰" />
-            <StatCard label="Выручка за месяц" value={currency(dashboard.monthSales)} color="blue" icon="📅" />
-            <StatCard label="Расходы за день" value={currency(dashboard.expenses)} color="amber" icon="💸" />
-            <StatCard label="Долги" value={currency(dashboard.debts)} color={dashboard.debts > 0 ? "red" : "green"} icon="🔗" />
+          <div className="receipt-summary">
+            <Metric label="Позиций с приходом" value={`${inventoryLines.filter((line) => line.incoming > 0).length}`} tone="neutral" />
+            <Metric label="Всего единиц" value={num(inventoryLines.reduce((total, line) => total + line.incoming, 0))} tone="good" />
           </div>
 
-          {/* Выручка по точкам */}
-          <div className="stats-section-block">
-            <h3>Выручка по точкам</h3>
-            <div className="stats-table">
-              {dashboard.revenueByPoint.map((item) => (
-                <div className="stats-row" key={item.pointId}>
-                  <span>{item.name}</span>
-                  <strong className="text-green">{currency(item.value)}</strong>
+          <label className="search-field">
+            <Search size={18} />
+            <input
+              value={receiptSearch}
+              onChange={(event) => setReceiptSearch(event.target.value)}
+              placeholder="Поиск товара для прихода"
+              aria-label="Поиск товара для прихода"
+            />
+          </label>
+
+          <div className="receipt-list">
+            {receiptLines.map((line) => (
+              <div className="receipt-row" key={line.product.id}>
+                <div>
+                  <strong>{line.rowNumber}. {line.product.name}</strong>
+                  <span>Было {num(line.previousRest)} · доступно {num(line.available)}</span>
+                </div>
+                <div className="small-stepper">
+                  <button type="button" onClick={() => adjustIncoming(line.product.id, line.incoming, -0.5)} disabled={!canEditReport} aria-label="Уменьшить приход">
+                    <Minus size={16} />
+                  </button>
+                  <input
+                    inputMode="decimal"
+                    value={num(line.incoming)}
+                    onChange={(event) => updateItem(line.product.id, { incoming: parseNumber(event.target.value) })}
+                    onKeyDown={(event) => {
+                      if (event.key === "ArrowUp") {
+                        event.preventDefault();
+                        adjustIncoming(line.product.id, line.incoming, 0.5);
+                      }
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault();
+                        adjustIncoming(line.product.id, line.incoming, -0.5);
+                      }
+                    }}
+                    disabled={!canEditReport}
+                    aria-label={`Приход ${line.product.name}`}
+                  />
+                  <button type="button" onClick={() => adjustIncoming(line.product.id, line.incoming, 0.5)} disabled={!canEditReport} aria-label="Увеличить приход">
+                    <Plus size={16} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {activeTab === "finance" && (
+        <section className="screen finance-screen">
+          <div className="screen-head">
+            <div>
+              <span className="overline">Финансы</span>
+              <h2>Касса и разница</h2>
+            </div>
+            <WalletCards size={22} />
+          </div>
+
+          <div className="finance-grid">
+            <Metric label="Выручка" value={currency(cashTotal.productRevenue)} tone="neutral" />
+            <Metric label="Сдали" value={currency(cashTotal.handedOver)} tone="neutral" />
+            <Metric label="Скидки" value={currency(financeTotals.discounts)} tone="warn" />
+            <Metric label="Расходы" value={currency(financeTotals.expenses)} tone="warn" />
+            <Metric label="Недостача" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
+          </div>
+
+          <div className="driver-tabs" aria-label="Водители">
+            {cashColumnKeys.map((columnKey) => {
+              const cash = cashColumns.find((item) => item.columnKey === columnKey) ?? calculateCash(emptyCash(columnKey));
+              return (
+                <button
+                  type="button"
+                  key={columnKey}
+                  className={selectedCashColumn === columnKey ? "active" : ""}
+                  onClick={() => setSelectedCashColumn(columnKey)}
+                >
+                  <span>{cash.driverName || columnKey}</span>
+                  <strong className={cash.shortageOrPlus < 0 ? "bad-text" : "good-text"}>{currency(cash.shortageOrPlus)}</strong>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="finance-editor">
+            <label>
+              Водитель
+              <input
+                value={selectedCashInput.driverName}
+                onChange={(event) => updateCash("driverName", event.target.value)}
+                disabled={!canEditReport}
+              />
+            </label>
+            <div className="two-fields">
+              <label>
+                Выручка
+                <input
+                  inputMode="decimal"
+                  value={num(selectedCashInput.productRevenue)}
+                  onChange={(event) => updateCash("productRevenue", parseNumber(event.target.value))}
+                  disabled={!canEditReport}
+                />
+              </label>
+              <label>
+                Сдали
+                <input
+                  inputMode="decimal"
+                  value={num(selectedCashInput.handedOver)}
+                  onChange={(event) => updateCash("handedOver", parseNumber(event.target.value))}
+                  disabled={!canEditReport}
+                />
+              </label>
+            </div>
+
+            <details>
+              <summary>
+                Расходы и скидки
+                <ChevronDown size={16} />
+              </summary>
+              <div className="expense-grid">
+                {cashFields.map(([field, label]) => (
+                  <label key={field}>
+                    {label}
+                    <input
+                      inputMode="decimal"
+                      value={num(Number(selectedCashInput[field]) || 0)}
+                      onChange={(event) => updateCash(field, parseNumber(event.target.value))}
+                      disabled={!canEditReport}
+                    />
+                  </label>
+                ))}
+              </div>
+            </details>
+
+            <div className="custom-expense-panel">
+              <div className="panel-title">
+                <strong>Доп. расходы</strong>
+                <span>{(selectedCashInput.customExpenses ?? []).length}</span>
+              </div>
+              <div className="custom-expense-form">
+                <input
+                  value={newCustomExpense.label}
+                  onChange={(event) => setNewCustomExpense((current) => ({ ...current, label: event.target.value }))}
+                  placeholder="Название"
+                  disabled={!canEditReport}
+                  aria-label="Название доп расхода"
+                />
+                <input
+                  inputMode="decimal"
+                  value={newCustomExpense.amount}
+                  onChange={(event) => setNewCustomExpense((current) => ({ ...current, amount: event.target.value }))}
+                  placeholder="AED"
+                  disabled={!canEditReport}
+                  aria-label="Сумма доп расхода"
+                />
+                <button type="button" onClick={addCustomExpense} disabled={!canEditReport} aria-label="Добавить доп расход">
+                  <Plus size={18} />
+                </button>
+              </div>
+              {(selectedCashInput.customExpenses ?? []).map((expense) => (
+                <div className="custom-expense-row" key={expense.id}>
+                  <span>{expense.label}</span>
+                  <strong>{currency(expense.amount)}</strong>
+                  <button type="button" onClick={() => removeCustomExpense(expense.id)} disabled={!canEditReport} aria-label="Удалить доп расход">
+                    <X size={15} />
+                  </button>
                 </div>
               ))}
-              <div className="stats-row total">
-                <span>Итого</span>
-                <strong>{currency(dashboard.daySales)}</strong>
-              </div>
+            </div>
+
+            <div className="finance-result">
+              <span>Должен сдать</span>
+              <strong>{currency(selectedCash.shouldHandOver)}</strong>
+              <span>Разница</span>
+              <strong className={selectedCash.shortageOrPlus < 0 ? "bad-text" : "good-text"}>{currency(selectedCash.shortageOrPlus)}</strong>
             </div>
           </div>
-
-          {/* Топ товары */}
-          {dashboard.topProducts.length > 0 && (
-            <div className="stats-section-block">
-              <h3>Топ-5 товаров</h3>
-              <div className="stats-table">
-                {dashboard.topProducts.map((item, idx) => (
-                  <div className="stats-row" key={item.productId}>
-                    <span><b className="rank">#{idx + 1}</b> {item.name}</span>
-                    <div className="stats-row-right">
-                      <span className="muted">{item.quantity} шт.</span>
-                      <strong>{currency(item.revenue)}</strong>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Недостачи */}
-          {dashboard.shortages.length > 0 && (
-            <div className="stats-section-block warning-block">
-              <h3>⚠️ Недостачи</h3>
-              <div className="stats-table">
-                {dashboard.shortages.map((item, idx) => (
-                  <div className="stats-row" key={idx}>
-                    <span>{item.point} · {item.driver}</span>
-                    <strong className="text-red">{currency(item.value)}</strong>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Ниже нормы */}
-          {dashboard.belowNorm.length > 0 && (
-            <div className="stats-section-block">
-              <h3>📉 Ниже нормы</h3>
-              <div className="stats-table">
-                {dashboard.belowNorm.map((item, idx) => (
-                  <div className="stats-row" key={idx}>
-                    <span>{item.product} <span className="muted">({item.point})</span></span>
-                    <div className="stats-row-right">
-                      <span className="muted">Остаток: {item.rest} / Норма: {item.norm}</span>
-                      <strong className="text-amber">Заявка: {item.request}</strong>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Выручка по водителям */}
-          {dashboard.revenueByDriver.length > 0 && (
-            <div className="stats-section-block">
-              <h3>Выручка по водителям</h3>
-              <div className="stats-table">
-                {dashboard.revenueByDriver.map((item) => (
-                  <div className="stats-row" key={item.driverId}>
-                    <span>{item.name}</span>
-                    <strong>{currency(item.value)}</strong>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </section>
       )}
 
-      {/* ════════════════════════════════
-          TAB: НАСТРОЙКИ
-      ════════════════════════════════ */}
-      {activeTab === "settings" && (
-        <section className="work-card settings-section" id="settings">
-          <div className="section-head">
-            <h2>Настройки</h2>
+      {activeTab === "more" && (
+        <section className="screen more-screen">
+          <div className="screen-head">
+            <div>
+              <span className="overline">Еще</span>
+              <h2>Закрытие дня</h2>
+            </div>
             <Settings size={22} />
           </div>
 
-          <div className="settings-grid">
-            {/* Точки */}
-            <div className="settings-block">
-              <h3>Точки</h3>
-              <div className="inline-form">
-                <input placeholder="Новая точка" value={newPointName} onChange={(e) => setNewPointName(e.target.value)} />
-                <button className="btn-icon-add" onClick={addPoint} aria-label="Добавить точку">
-                  <Plus size={18} />
-                </button>
-              </div>
-              <div className="simple-list">
-                {state.points.map((point) => (
-                  <div className="settings-entity-row" key={point.id}>
-                    {editingPointId === point.id ? (
-                      <input
-                        className="inline-edit"
-                        defaultValue={point.name}
-                        autoFocus
-                        onBlur={(e) => {
-                          if (e.target.value.trim()) updatePoint(point.id, { name: e.target.value.trim() });
-                          setEditingPointId(null);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                          if (e.key === "Escape") setEditingPointId(null);
-                        }}
-                      />
-                    ) : (
-                      <button className="entity-name-btn" type="button" onClick={() => setEditingPointId(point.id)}>
-                        {point.name}
-                      </button>
-                    )}
-                    <div className="entity-actions">
-                      <label className="toggle-small">
-                        <input
-                          type="checkbox"
-                          checked={point.active}
-                          onChange={(e) => updatePoint(point.id, { active: e.target.checked })}
-                        />
-                        Активна
-                      </label>
-                      <button className="btn-icon-danger" type="button" onClick={() => removePoint(point.id)} aria-label="Удалить точку">
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+          <div className={missingCount ? "close-panel locked" : "close-panel ready"}>
+            <div className="close-status">
+              {missingCount ? <Lock size={22} /> : <CheckCircle2 size={22} />}
+              <div>
+                <strong>
+                  {filledCount} / {inventoryLines.length}
+                </strong>
+                <span>{missingCount ? `Осталось заполнить: ${missingCount} товаров` : "Проверка завершена"}</span>
               </div>
             </div>
+            <button type="button" className="primary-cta" onClick={closeDay} disabled={closeDisabled}>
+              Закрыть день
+            </button>
+            {currentReport.closed && (
+              <button type="button" className="secondary-wide" onClick={reopenDay}>
+                Открыть отчет снова
+              </button>
+            )}
+          </div>
 
-            {/* Водители */}
-            <div className="settings-block">
-              <h3>Водители</h3>
-              <div className="driver-add-form">
-                <input
-                  placeholder="Имя водителя"
-                  value={newDriver.name}
-                  onChange={(e) => setNewDriver((cur) => ({ ...cur, name: e.target.value }))}
-                />
-                <select
-                  value={newDriver.pointId}
-                  onChange={(e) => setNewDriver((cur) => ({ ...cur, pointId: e.target.value }))}
-                >
-                  {state.points.filter((p) => p.active).map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-                <button className="btn-icon-add" onClick={addDriver} aria-label="Добавить водителя">
-                  <UserPlus size={18} />
-                </button>
+          <div className="report-card">
+            <h3>Отчет перед закрытием</h3>
+            <ReportRow label="Продано" value={currency(revenue)} />
+            <ReportRow label="Перемещения" value={currency(transferValue)} />
+            <ReportRow label="Скидки" value={currency(financeTotals.discounts)} />
+            <ReportRow label="Сдали" value={currency(cashTotal.handedOver)} />
+            <ReportRow label="Разница" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
+          </div>
+
+          {(problemCount > 0 || reportWarningList.length > 0) && (
+            <div className="warning-list">
+              <div>
+                <AlertTriangle size={18} />
+                <strong>Проверка</strong>
               </div>
-              <div className="simple-list">
-                {state.drivers.map((driver) => {
-                  const pointName = state.points.find((p) => p.id === driver.pointId)?.name ?? driver.pointId;
-                  return (
-                    <div className="driver-row" key={driver.id}>
-                      <div className="driver-row-main">
-                        {editingDriverId === driver.id ? (
-                          <input
-                            className="inline-edit"
-                            defaultValue={driver.name}
-                            autoFocus
-                            onBlur={(e) => {
-                              if (e.target.value.trim()) updateDriver(driver.id, { name: e.target.value.trim() });
-                              setEditingDriverId(null);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                              if (e.key === "Escape") setEditingDriverId(null);
-                            }}
-                          />
-                        ) : (
-                          <button className="entity-name-btn" type="button" onClick={() => setEditingDriverId(driver.id)}>
-                            <strong>{driver.name}</strong>
-                          </button>
-                        )}
-                        <span className="muted-text">{pointName}</span>
-                      </div>
-                      <div className="driver-row-actions">
-                        <select
-                          value={driver.pointId}
-                          onChange={(e) => updateDriver(driver.id, { pointId: e.target.value })}
-                        >
-                          {state.points.filter((p) => p.active).map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
-                        <label className="toggle-small">
-                          <input
-                            type="checkbox"
-                            checked={driver.active}
-                            onChange={(e) => updateDriver(driver.id, { active: e.target.checked })}
-                          />
-                          Активен
-                        </label>
-                        <button className="btn-icon-danger" type="button" onClick={() => removeDriver(driver.id)} aria-label="Удалить водителя">
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              {reportWarningList.slice(0, 5).map((warning) => (
+                <span key={`${warning.code}-${warning.message}`}>{warning.message}</span>
+              ))}
             </div>
+          )}
 
-            {/* Товары */}
-            <div className="settings-block wide">
-              <h3>Товары</h3>
-              <div className="product-add-form">
-                <input
-                  placeholder="Название"
-                  value={newProduct.name}
-                  onChange={(e) => setNewProduct((cur) => ({ ...cur, name: e.target.value }))}
-                />
-                <input
-                  type="number"
-                  placeholder="Цена"
-                  value={newProduct.price || ""}
-                  onChange={(e) => setNewProduct((cur) => ({ ...cur, price: parseNumber(e.target.value) }))}
-                />
-                <input
-                  type="number"
-                  placeholder="Норма"
-                  value={newProduct.norm || ""}
-                  onChange={(e) => setNewProduct((cur) => ({ ...cur, norm: parseNumber(e.target.value) }))}
-                />
-                <button className="btn-icon-add" onClick={addProduct} aria-label="Добавить товар">
-                  <Plus size={18} />
-                </button>
-              </div>
-              <div className="product-admin-list">
-                {state.products.map((product) => (
-                  <div className="admin-product" key={product.id}>
-                    <input value={product.name} onChange={(e) => updateProduct(product.id, { name: e.target.value })} />
-                    <input
-                      type="number"
-                      placeholder="Цена"
-                      value={product.price}
-                      onChange={(e) => updateProduct(product.id, { price: parseNumber(e.target.value) })}
-                    />
-                    <input
-                      type="number"
-                      placeholder="Норма"
-                      value={product.norm}
-                      onChange={(e) => updateProduct(product.id, { norm: parseNumber(e.target.value) })}
-                    />
-                    <label className="toggle-small">
-                      <input
-                        type="checkbox"
-                        checked={product.active}
-                        onChange={(e) => updateProduct(product.id, { active: e.target.checked })}
-                      />
-                      Актив.
-                    </label>
-                  </div>
-                ))}
-              </div>
+          <div className="analytics-panel">
+            <div className="panel-title">
+              <strong>Общая статистика</strong>
+              <span>{analytics.weekStart} → {selectedDate}</span>
             </div>
-
-            {/* Импорт Excel */}
-            <div className="settings-block wide import-block">
-              <h3>Импорт Excel</h3>
-              <p className="settings-hint">Загрузите файл отчёта — данные сохранятся в приложении по выбранной дате.</p>
-              <div className="import-form">
-                <label>
-                  Дата отчёта
-                  <input type="date" value={importDate} onChange={(e) => setImportDate(e.target.value)} />
-                </label>
-                <label>
-                  Режим
-                  <select value={importMode} onChange={(e) => setImportMode(e.target.value as ImportMode)}>
-                    <option value="merge">Обновить существующие</option>
-                    <option value="replace">Заменить полностью</option>
-                  </select>
-                </label>
-                <label className="import-file-label">
-                  Файл .xlsx
-                  <input
-                    type="file"
-                    accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) void handleExcelImport(file);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-              </div>
+            <div className="finance-grid">
+              <Metric label="Неделя" value={currency(analytics.week.total)} tone="neutral" />
+              <Metric label="Месяц" value={currency(analytics.month.total)} tone="neutral" />
+            </div>
+            <div className="analytics-columns">
+              <TopList title="Топ точек за неделю" items={analytics.week.points.slice(0, 5).map((item) => ({ label: item.name, value: currency(item.value) }))} />
+              <TopList
+                title="Топ водителей за неделю"
+                items={analytics.week.drivers.slice(0, 5).map((item) => ({ label: `${item.name} · ${item.point}`, value: currency(item.value) }))}
+              />
+              <TopList title="Топ точек за месяц" items={analytics.month.points.slice(0, 5).map((item) => ({ label: item.name, value: currency(item.value) }))} />
+              <TopList
+                title="Топ водителей за месяц"
+                items={analytics.month.drivers.slice(0, 5).map((item) => ({ label: `${item.name} · ${item.point}`, value: currency(item.value) }))}
+              />
             </div>
           </div>
+
+          <div className="carryover-panel">
+            <div className="panel-title">
+              <strong>Контроль остатков</strong>
+              <span>{carryoverAudit.previousDate}</span>
+            </div>
+            <ReportRow label="Вчерашний отчет закрыт" value={carryoverAudit.previousClosed ? "Да" : "Нет"} tone={carryoverAudit.previousClosed ? "good" : "bad"} />
+            <ReportRow label="Перенесено позиций" value={`${carryoverAudit.currentPreviousRestCount} / ${inventoryLines.length}`} />
+          </div>
+
+          <div className="settings-panel">
+            <label>
+              Дата отчета
+              <input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
+            </label>
+            <label>
+              Точка
+              <select value={selectedPointId} onChange={(event) => selectPoint(event.target.value)}>
+                {state.points.filter((point) => point.active).map((point) => (
+                  <option key={point.id} value={point.id}>
+                    {point.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="download-actions">
+              <button type="button" className="secondary-action" onClick={() => exportExcel("single")}>
+                <Download size={18} />
+                Отчет точки
+              </button>
+              <button type="button" className="secondary-action" onClick={() => exportExcel("all")}>
+                <Download size={18} />
+                Все точки
+              </button>
+            </div>
+          </div>
+
+          <details className="directory-panel">
+            <summary>
+              Справочники
+              <ChevronDown size={16} />
+            </summary>
+
+            <div className="directory-section">
+              <div className="panel-title">
+                <strong>Точки</strong>
+                <span>{state.points.filter((point) => point.active).length}</span>
+              </div>
+              <div className="inline-add-form">
+                <input value={newPointName} onChange={(event) => setNewPointName(event.target.value)} placeholder="Новая точка" />
+                <button type="button" onClick={addPoint} aria-label="Добавить точку">
+                  <Plus size={18} />
+                </button>
+              </div>
+              {state.points.map((point) => (
+                <div className="admin-row" key={point.id}>
+                  <input value={point.name} onChange={(event) => updatePoint(point.id, { name: event.target.value })} />
+                  <label className="mini-toggle">
+                    <input type="checkbox" checked={point.active} onChange={(event) => updatePoint(point.id, { active: event.target.checked })} />
+                    Активна
+                  </label>
+                  <button type="button" onClick={() => removePoint(point.id)} aria-label="Удалить точку">
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="directory-section">
+              <div className="panel-title">
+                <strong>Водители</strong>
+                <span>{state.drivers.filter((driver) => driver.active).length}</span>
+              </div>
+              <div className="driver-add-form">
+                <input value={newDriver.name} onChange={(event) => setNewDriver((current) => ({ ...current, name: event.target.value }))} placeholder="Имя водителя" />
+                <select value={newDriver.pointId} onChange={(event) => setNewDriver((current) => ({ ...current, pointId: event.target.value }))}>
+                  {state.points.filter((point) => point.active).map((point) => (
+                    <option key={point.id} value={point.id}>
+                      {point.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" onClick={addDriver} aria-label="Добавить водителя">
+                  <Plus size={18} />
+                </button>
+              </div>
+              {state.drivers.map((driver) => (
+                <div className="admin-row driver-admin-row" key={driver.id}>
+                  <input value={driver.name} onChange={(event) => updateDriver(driver.id, { name: event.target.value })} />
+                  <select value={driver.pointId} onChange={(event) => updateDriver(driver.id, { pointId: event.target.value })}>
+                    {state.points.filter((point) => point.active).map((point) => (
+                      <option key={point.id} value={point.id}>
+                        {point.name}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="mini-toggle">
+                    <input type="checkbox" checked={driver.active} onChange={(event) => updateDriver(driver.id, { active: event.target.checked })} />
+                    Активен
+                  </label>
+                  <button type="button" onClick={() => removeDriver(driver.id)} aria-label="Удалить водителя">
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="directory-section">
+              <div className="panel-title">
+                <strong>Товары</strong>
+                <span>{state.products.filter((product) => product.active).length}</span>
+              </div>
+              <div className="product-add-form">
+                <input value={newProduct.name} onChange={(event) => setNewProduct((current) => ({ ...current, name: event.target.value }))} placeholder="Название" />
+                <input inputMode="decimal" value={newProduct.price} onChange={(event) => setNewProduct((current) => ({ ...current, price: event.target.value }))} placeholder="Цена" />
+                <input inputMode="decimal" value={newProduct.norm} onChange={(event) => setNewProduct((current) => ({ ...current, norm: event.target.value }))} placeholder="Норма" />
+                <input value={newProduct.category} onChange={(event) => setNewProduct((current) => ({ ...current, category: event.target.value }))} placeholder="Категория" />
+                <button type="button" onClick={addProduct} aria-label="Добавить товар">
+                  <Plus size={18} />
+                </button>
+              </div>
+              <label className="search-field compact">
+                <Search size={17} />
+                <input value={productAdminSearch} onChange={(event) => setProductAdminSearch(event.target.value)} placeholder="Поиск в товарах" aria-label="Поиск в товарах" />
+              </label>
+              <div className="product-admin-list">
+                {adminProducts.map((product) => (
+                  <div className="product-admin-row" key={product.id}>
+                    <input value={product.name} onChange={(event) => updateProduct(product.id, { name: event.target.value })} />
+                    <input inputMode="decimal" value={num(product.price)} onChange={(event) => updateProduct(product.id, { price: parseNumber(event.target.value) })} />
+                    <input inputMode="decimal" value={num(product.norm)} onChange={(event) => updateProduct(product.id, { norm: parseNumber(event.target.value) })} />
+                    <input value={product.category} onChange={(event) => updateProduct(product.id, { category: event.target.value })} />
+                    <label className="mini-toggle">
+                      <input type="checkbox" checked={product.active} onChange={(event) => updateProduct(product.id, { active: event.target.checked })} />
+                      Актив.
+                    </label>
+                    <button type="button" onClick={() => removeProduct(product.id)} aria-label="Удалить товар">
+                      <X size={15} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </details>
         </section>
       )}
 
-      {/* ─── BOTTOM ACTIONS (Excel) ─── */}
-      <section className="bottom-actions excel-actions">
-        <div className="excel-format-picker">
-          <span>Формат Excel:</span>
-          <select
-            value={exportOptions.format}
-            onChange={(e) => setExportOptions((cur) => ({ ...cur, format: e.target.value as ExportOptions["format"] }))}
-          >
-            <option value="template">1 — Классический шаблон</option>
-            <option value="modern">2 — Новый чистый отчёт</option>
-          </select>
+      {progressOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Статус заполнения">
+          <div className="scanner-sheet progress-sheet">
+            <div className="screen-head">
+              <div>
+                <span className="overline">Заполнение</span>
+                <h2>{filledCount} / {inventoryLines.length}</h2>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setProgressOpen(false)} aria-label="Закрыть список заполнения">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="progress-columns">
+              <div>
+                <div className="panel-title">
+                  <strong>Не заполнено</strong>
+                  <span>{missingLines.length}</span>
+                </div>
+                <div className="progress-list">
+                  {missingLines.map((line) => (
+                    <ProductPickButton
+                      key={line.product.id}
+                      line={line}
+                      onClick={() => {
+                        setProgressOpen(false);
+                        startQuick(line.product.id, null);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="panel-title">
+                  <strong>Заполнено</strong>
+                  <span>{filledLines.length}</span>
+                </div>
+                <div className="progress-list">
+                  {filledLines.map((line) => (
+                    <ProductPickButton
+                      key={line.product.id}
+                      line={line}
+                      onClick={() => {
+                        setProgressOpen(false);
+                        startQuick(line.product.id, null);
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <button className="btn-secondary" onClick={() => exportExcel("single")}>
-          <FileSpreadsheet size={18} /> Excel точки
-        </button>
-        <button className="btn-primary" onClick={() => exportExcel("all")}>
-          <FileSpreadsheet size={18} /> Excel все
-        </button>
-      </section>
+      )}
 
-      {/* ─── EXPORT PERIOD ─── */}
-      <details className="fold export-more">
-        <summary>
-          <span>Экспорт за период</span>
-          <ChevronDown size={16} />
-        </summary>
-        <div className="export-form">
-          <label>
-            Формат
-            <select
-              value={exportOptions.scope}
-              onChange={(e) => setExportOptions((cur) => ({ ...cur, scope: e.target.value as ExportOptions["scope"] }))}
-            >
-              <option value="day">Отчет за день</option>
-              <option value="period">Отчет за период</option>
-            </select>
-          </label>
-          <label>
-            С
-            <input
-              type="date"
-              value={exportOptions.startDate}
-              onChange={(e) => setExportOptions((cur) => ({ ...cur, startDate: e.target.value }))}
-            />
-          </label>
-          <label>
-            По
-            <input
-              type="date"
-              value={exportOptions.endDate}
-              onChange={(e) => setExportOptions((cur) => ({ ...cur, endDate: e.target.value }))}
-            />
-          </label>
-          <label>
-            Точки
-            <select
-              value={exportOptions.pointScope}
-              onChange={(e) => setExportOptions((cur) => ({ ...cur, pointScope: e.target.value as ExportOptions["pointScope"] }))}
-            >
-              <option value="all">Все точки</option>
-              <option value="single">Одна точка</option>
-            </select>
-          </label>
-          <label>
-            Формат Excel
-            <select
-              value={exportOptions.format}
-              onChange={(e) => setExportOptions((cur) => ({ ...cur, format: e.target.value as ExportOptions["format"] }))}
-            >
-              <option value="template">1 — Классический шаблон</option>
-              <option value="modern">2 — Новый чистый отчёт</option>
-            </select>
-          </label>
+      {scannerOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Сканирование штрих-кода">
+          <div className="scanner-sheet">
+            <div className="screen-head">
+              <div>
+                <span className="overline">Сканер</span>
+                <h2>Открыть товар</h2>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setScannerOpen(false)} aria-label="Закрыть сканер">
+                <X size={20} />
+              </button>
+            </div>
+            <video ref={videoRef} playsInline muted />
+            <label className="search-field compact">
+              <ScanLine size={17} />
+              <input
+                value={scannerQuery}
+                onChange={(event) => setScannerQuery(event.target.value)}
+                placeholder="Код или название"
+                aria-label="Код или название товара"
+              />
+            </label>
+            <button type="button" className="primary-cta" onClick={() => handleScanValue(scannerQuery)}>
+              Открыть товар
+            </button>
+          </div>
         </div>
-        <button className="btn-secondary mt-10" onClick={exportAdvanced}>
-          Скачать выбранный Excel
-        </button>
-      </details>
+      )}
+
+      <nav className="bottom-nav" aria-label="Основное меню">
+        <NavButton icon={<HomeIcon size={20} />} label="Главная" active={activeTab === "home"} onClick={() => setActiveTab("home")} />
+        <NavButton
+          icon={<Package size={20} />}
+          label="Инвент."
+          active={activeTab === "inventory"}
+          badge={missingCount}
+          onClick={() => {
+            setInventoryView("categories");
+            setActiveTab("inventory");
+          }}
+        />
+        <NavButton icon={<PackagePlus size={20} />} label="Приход" active={activeTab === "receipts"} onClick={() => setActiveTab("receipts")} />
+        <NavButton icon={<Truck size={20} />} label="Перемещ." active={activeTab === "transfers"} onClick={() => setActiveTab("transfers")} />
+        <NavButton icon={<WalletCards size={20} />} label="Финансы" active={activeTab === "finance"} onClick={() => setActiveTab("finance")} />
+        <NavButton icon={<MoreHorizontal size={20} />} label="Еще" active={activeTab === "more"} onClick={() => setActiveTab("more")} />
+      </nav>
+
+      {lastSaved && <span className="save-stamp">Сохранено {lastSaved}</span>}
     </main>
   );
 }
 
-function Metric({ label, value, tone, icon }: { label: string; value: string; tone: "green" | "blue" | "amber" | "red"; icon: string }) {
+function Metric({ label, value, tone }: { label: string; value: string; tone: "good" | "neutral" | "warn" | "bad" }) {
   return (
     <div className={`metric ${tone}`}>
-      <span className="metric-icon">{icon}</span>
-      <span className="metric-label">{label}</span>
-      <strong className="metric-value">{value}</strong>
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }
 
-function StatCard({ label, value, color, icon }: { label: string; value: string; color: "green" | "blue" | "amber" | "red"; icon: string }) {
+function ProductPickButton({ line, onClick }: { line: ReportLine; onClick: () => void }) {
+  const tone = lineTone(line);
   return (
-    <div className={`stat-card ${color}`}>
-      <span className="stat-icon">{icon}</span>
+    <button type="button" className="product-pick" onClick={onClick}>
+      <span className={`dot ${tone}`} />
       <div>
-        <span className="stat-label">{label}</span>
-        <strong className="stat-value">{value}</strong>
+        <strong>{line.rowNumber}. {line.product.name}</strong>
+        <span>
+          Было {num(line.previousRest)} · {lineStatusText(line)}
+        </span>
       </div>
+      <ArrowRight size={18} />
+    </button>
+  );
+}
+
+function ReportRow({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "bad" }) {
+  return (
+    <div className="report-row">
+      <span>{label}</span>
+      <strong className={tone === "bad" ? "bad-text" : tone === "good" ? "good-text" : ""}>{value}</strong>
     </div>
+  );
+}
+
+function TopList({ title, items }: { title: string; items: Array<{ label: string; value: string }> }) {
+  return (
+    <div className="top-list">
+      <h3>{title}</h3>
+      {items.length ? (
+        items.map((item, index) => (
+          <div className="report-row" key={`${item.label}-${index}`}>
+            <span>
+              {index + 1}. {item.label}
+            </span>
+            <strong>{item.value}</strong>
+          </div>
+        ))
+      ) : (
+        <div className="empty-state">Нет данных</div>
+      )}
+    </div>
+  );
+}
+
+function NavButton({
+  icon,
+  label,
+  active,
+  badge,
+  onClick
+}: {
+  icon: ReactNode;
+  label: string;
+  active: boolean;
+  badge?: number;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className={active ? "active" : ""} onClick={onClick}>
+      <span className="nav-icon">
+        {icon}
+        {Boolean(badge) && <b>{badge}</b>}
+      </span>
+      <span>{label}</span>
+    </button>
   );
 }
