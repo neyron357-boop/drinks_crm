@@ -1,0 +1,16 @@
+{
+  "name": "Учет продаж напитков",
+  "short_name": "Напитки",
+  "description": "Ежедневный учет продаж напитков по точкам доставки",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#16324a",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
