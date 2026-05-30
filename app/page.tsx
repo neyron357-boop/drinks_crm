@@ -8,23 +8,28 @@ import {
   CheckCircle2,
   ChevronDown,
   Download,
+  Eraser,
+  ImageDown,
   Home as HomeIcon,
   Lock,
-  Mic,
   Minus,
   MoreHorizontal,
   Package,
   PackagePlus,
   Plus,
-  ScanLine,
+  RefreshCcw,
   Search,
   Settings,
   Star,
   Truck,
+  Upload,
+  Volume2,
+  VolumeX,
   WalletCards,
+  Wifi,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from "react";
 import {
   calculateCash,
   calculateCashColumns,
@@ -39,6 +44,7 @@ import {
 } from "./lib/calculations";
 import { applyCarryoverAfterClose } from "./lib/carryover";
 import { createExcelReportFile } from "./lib/excel";
+import { importExcelReport } from "./lib/excel-import";
 import { formatDecimal, parseDecimal, parseOptionalDecimal } from "./lib/numbers";
 import { createEmptyReport, createInitialState, emptyCash, reportId } from "./lib/seed";
 import { loadState, saveState } from "./lib/storage";
@@ -50,6 +56,7 @@ import type {
   DailyReport,
   Driver,
   ExportOptions,
+  ImportMode,
   Point,
   Product,
   ReportItemInput,
@@ -61,18 +68,7 @@ type Tab = "home" | "inventory" | "receipts" | "transfers" | "finance" | "more";
 type CategoryId = "spirits" | "beer" | "wine" | "sparkling" | "premium";
 type InventoryView = "categories" | "quick" | "list";
 type LineTone = "empty" | "done" | "warn";
-type SpeechRecognitionResultEventLike = { results?: ArrayLike<ArrayLike<{ transcript: string }>> };
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  maxAlternatives: number;
-  start: () => void;
-  onstart: (() => void) | null;
-  onend: (() => void) | null;
-  onerror: (() => void) | null;
-  onresult: ((event: SpeechRecognitionResultEventLike) => void) | null;
-};
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+type ServerCheck = { status: "idle" | "checking" | "ok" | "error"; message: string };
 
 const categoryDefs: Array<{
   id: CategoryId;
@@ -220,10 +216,36 @@ function productMatchesCategory(product: Product, categoryId: CategoryId) {
   return false;
 }
 
-function extractSpokenNumber(text: string) {
-  const match = text.replace(",", ".").match(/-?\d+(?:\.\d+)?/);
-  if (!match) return undefined;
-  return parseOptionalNumber(match[0]);
+function allowsDecimalProduct(product: Product) {
+  return productMatchesCategory(product, "beer");
+}
+
+function quantityStep(product: Product | undefined) {
+  return product && allowsDecimalProduct(product) ? 0.5 : 1;
+}
+
+function normalizeQuantityInput(value: string, product: Product) {
+  const normalized = value.trim().replace(/\s+/g, "").replace(",", ".");
+  if (allowsDecimalProduct(product)) return normalized;
+  return normalized.split(".")[0];
+}
+
+function parseOptionalQuantity(value: string, product: Product) {
+  const normalized = normalizeQuantityInput(value, product);
+  if (normalized === "") return undefined;
+  const parsed = parseOptionalNumber(normalized);
+  if (typeof parsed !== "number") return undefined;
+  return Math.max(0, allowsDecimalProduct(product) ? parsed : Math.round(parsed));
+}
+
+function parseQuantity(value: string, product: Product, fallback = 0) {
+  const parsed = parseOptionalQuantity(value, product);
+  return typeof parsed === "number" ? parsed : fallback;
+}
+
+function formatQuantity(value: number | undefined, product: Product) {
+  if (typeof value !== "number") return "";
+  return allowsDecimalProduct(product) ? num(value) : String(Math.round(value));
 }
 
 function replaceReport(state: AppState, nextReport: DailyReport): AppState {
@@ -258,10 +280,7 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [preparedDownload, setPreparedDownload] = useState<{ url: string; fileName: string } | null>(null);
   const [lastSaved, setLastSaved] = useState("");
-  const [scannerOpen, setScannerOpen] = useState(false);
-  const [scannerQuery, setScannerQuery] = useState("");
   const [progressOpen, setProgressOpen] = useState(false);
-  const [voiceActive, setVoiceActive] = useState(false);
   const [receiptSearch, setReceiptSearch] = useState("");
   const [transferSearch, setTransferSearch] = useState("");
   const [newPointName, setNewPointName] = useState("");
@@ -269,6 +288,12 @@ export default function Home() {
   const [newProduct, setNewProduct] = useState({ name: "", price: "", norm: "", category: "Напитки" });
   const [newCustomExpense, setNewCustomExpense] = useState({ label: "", amount: "" });
   const [productAdminSearch, setProductAdminSearch] = useState("");
+  const [quickPreviewRest, setQuickPreviewRest] = useState<number | undefined>(undefined);
+  const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
+  const [bulkRestValue, setBulkRestValue] = useState("");
+  const [importMode, setImportMode] = useState<ImportMode>("merge");
+  const [serverCheck, setServerCheck] = useState<ServerCheck>({ status: "idle", message: "Проверка не запускалась" });
+  const [uiSoundEnabled, setUiSoundEnabled] = useState(true);
   const [transferForm, setTransferForm] = useState({
     fromPointId: "jvc",
     toPointId: "business-bay",
@@ -278,7 +303,11 @@ export default function Home() {
   });
 
   const quickInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const quickDraftRef = useRef("");
+  const quickCommitTimerRef = useRef<number | undefined>(undefined);
+  const pendingQuickCommitRef = useRef<{ productId: string; value: number | undefined } | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
 
   useEffect(() => {
     const loaded = loadState();
@@ -294,13 +323,17 @@ export default function Home() {
       toPointId: loaded.points.find((point) => point.active && point.id !== firstPoint)?.id ?? firstPoint,
       productId: loaded.products.find((product) => product.active && (!product.pointIds || product.pointIds.includes(firstPoint)))?.id ?? current.productId
     }));
+    setUiSoundEnabled(window.localStorage.getItem("drink-ledger-ui-sound") !== "off");
     setHydrated(true);
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    saveState(state);
-    setLastSaved(new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }));
+    const id = window.setTimeout(() => {
+      saveState(state);
+      setLastSaved(new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }));
+    }, 180);
+    return () => window.clearTimeout(id);
   }, [state, hydrated]);
 
   useEffect(() => {
@@ -326,11 +359,14 @@ export default function Home() {
   );
   const reportLines = useMemo(() => calculateReportLines(state, currentReport), [currentReport, state]);
   const inventoryLines = useMemo(() => [...reportLines].sort((a, b) => a.rowNumber - b.rowNumber), [reportLines]);
-  const revenue = useMemo(() => calculateReportRevenue(state, currentReport), [currentReport, state]);
+  const revenue = useMemo(
+    () => (activeTab === "home" || activeTab === "finance" || activeTab === "more" ? calculateReportRevenue(state, currentReport) : 0),
+    [activeTab, currentReport, state]
+  );
   const cashColumns = useMemo(() => calculateCashColumns(currentReport), [currentReport]);
   const cashTotal = useMemo(() => calculateCashTotal(currentReport), [currentReport]);
-  const dashboard = useMemo(() => calculateDashboard(state, selectedDate), [selectedDate, state]);
-  const reportWarningList = useMemo(() => getReportWarnings(state, currentReport), [currentReport, state]);
+  const dashboardDaySales = useMemo(() => (activeTab === "home" ? calculateDashboard(state, selectedDate).daySales : 0), [activeTab, selectedDate, state]);
+  const reportWarningList = useMemo(() => (activeTab === "more" ? getReportWarnings(state, currentReport) : []), [activeTab, currentReport, state]);
   const errorWarningCount = reportWarningList.filter((warning) => warning.severity === "error").length;
   const selectedPoint = state.points.find((point) => point.id === selectedPointId);
   const canEditReport = !currentReport.closed;
@@ -346,6 +382,11 @@ export default function Home() {
   const selectedCash = useMemo(() => calculateCash(selectedCashInput), [selectedCashInput]);
   const filledLines = useMemo(() => inventoryLines.filter((line) => typeof line.homeRest === "number"), [inventoryLines]);
   const missingLines = useMemo(() => inventoryLines.filter((line) => typeof line.homeRest !== "number"), [inventoryLines]);
+  const financeRevenueGap = useMemo(() => parseNumber(String(cashTotal.productRevenue - revenue)), [cashTotal.productRevenue, revenue]);
+  const discrepancyLines = useMemo(
+    () => inventoryLines.filter((line) => currentReport.items[line.product.id]?.flagged),
+    [currentReport.items, inventoryLines]
+  );
 
   const favoriteLines = useMemo(
     () =>
@@ -384,6 +425,7 @@ export default function Home() {
       .filter((line) => line.product.name.toLowerCase().includes(query) || line.product.id.includes(query))
       .slice(0, 12);
   }, [inventoryLines, search]);
+  const visibleInventoryLines = search ? searchResults : inventoryLines;
 
   const receiptLines = useMemo(() => {
     const query = receiptSearch.trim().toLowerCase();
@@ -519,45 +561,53 @@ export default function Home() {
     const id = window.setTimeout(() => {
       quickInputRef.current?.focus();
       quickInputRef.current?.select();
-    }, 80);
+    }, 20);
     return () => window.clearTimeout(id);
   }, [activeTab, inventoryView, quickIndex, quickLine?.product.id]);
 
   useEffect(() => {
-    if (!scannerOpen) return;
+    const nextDraft = quickLine ? formatQuantity(quickLine.homeRest, quickLine.product) : "";
+    quickDraftRef.current = nextDraft;
+    setQuickPreviewRest(quickLine?.homeRest);
+    if (quickInputRef.current) quickInputRef.current.value = nextDraft;
+  }, [quickLine?.product.id]);
 
-    let stream: MediaStream | null = null;
-    let timer: number | undefined;
-    let stopped = false;
-
-    async function startScanner() {
-      const BarcodeDetectorCtor = (window as unknown as { BarcodeDetector?: new (options?: unknown) => { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> } }).BarcodeDetector;
-      if (!navigator.mediaDevices?.getUserMedia || !BarcodeDetectorCtor || !videoRef.current) return;
-
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-        if (stopped || !videoRef.current) return;
-        videoRef.current.srcObject = stream;
-        await videoRef.current.play();
-        const detector = new BarcodeDetectorCtor({ formats: ["ean_13", "ean_8", "code_128", "qr_code"] });
-        timer = window.setInterval(async () => {
-          if (!videoRef.current) return;
-          const codes = await detector.detect(videoRef.current).catch(() => []);
-          const code = codes[0]?.rawValue;
-          if (code) handleScanValue(code);
-        }, 650);
-      } catch {
-        setNotice("Камера недоступна. Введите код или название товара вручную.");
-      }
-    }
-
-    void startScanner();
+  useEffect(() => {
     return () => {
-      stopped = true;
-      if (timer) window.clearInterval(timer);
-      stream?.getTracks().forEach((track) => track.stop());
+      if (quickCommitTimerRef.current) window.clearTimeout(quickCommitTimerRef.current);
     };
-  }, [scannerOpen]);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const flush = () => saveState(state);
+    window.addEventListener("pagehide", flush);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      window.removeEventListener("beforeunload", flush);
+    };
+  }, [hydrated, state]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem("drink-ledger-ui-sound", uiSoundEnabled ? "on" : "off");
+  }, [hydrated, uiSoundEnabled]);
+
+  useEffect(() => {
+    const activeIds = new Set(inventoryLines.map((line) => line.product.id));
+    setBulkSelectedIds((current) => current.filter((id) => activeIds.has(id)));
+  }, [inventoryLines]);
+
+  useEffect(() => {
+    const handlePointerUp = (event: PointerEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target?.closest("button, select")) return;
+      playInteractionSound();
+    };
+    window.addEventListener("pointerup", handlePointerUp, { passive: true });
+    return () => window.removeEventListener("pointerup", handlePointerUp);
+  }, [uiSoundEnabled]);
 
   function updateReport(mutator: (report: DailyReport) => DailyReport) {
     setState((current) => {
@@ -580,10 +630,33 @@ export default function Home() {
           homeRest: report.items[productId]?.homeRest,
           extraRequest: report.items[productId]?.extraRequest ?? 0,
           currentRest: report.items[productId]?.currentRest,
+          flagged: report.items[productId]?.flagged,
+          driverRest: report.items[productId]?.driverRest,
+          driverSale: report.items[productId]?.driverSale,
+          discrepancyNote: report.items[productId]?.discrepancyNote,
           ...patch
         }
       }
     }));
+  }
+
+  function flushQuickCommit() {
+    const pending = pendingQuickCommitRef.current;
+    if (!pending) return;
+    pendingQuickCommitRef.current = null;
+    if (quickCommitTimerRef.current) {
+      window.clearTimeout(quickCommitTimerRef.current);
+      quickCommitTimerRef.current = undefined;
+    }
+    startTransition(() => {
+      updateItem(pending.productId, { homeRest: pending.value, currentRest: pending.value });
+    });
+  }
+
+  function scheduleQuickCommit(productId: string, value: number | undefined) {
+    pendingQuickCommitRef.current = { productId, value };
+    if (quickCommitTimerRef.current) window.clearTimeout(quickCommitTimerRef.current);
+    quickCommitTimerRef.current = window.setTimeout(flushQuickCommit, 70);
   }
 
   function updateCash(field: keyof CashInput, value: number | string) {
@@ -633,6 +706,233 @@ export default function Home() {
 
   function removeCustomExpense(id: string) {
     updateCashCustomExpenses((selectedCashInput.customExpenses ?? []).filter((expense) => expense.id !== id));
+  }
+
+  function playInteractionSound() {
+    if (!uiSoundEnabled || typeof window === "undefined") return;
+    const AudioContextCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextCtor) return;
+    const context = audioContextRef.current ?? new AudioContextCtor();
+    audioContextRef.current = context;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = 620;
+    gain.gain.setValueAtTime(0.0001, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.035, context.currentTime + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.045);
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.05);
+  }
+
+  function toggleBulkProduct(productId: string) {
+    setBulkSelectedIds((current) =>
+      current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId]
+    );
+  }
+
+  function selectVisibleBulkProducts() {
+    setBulkSelectedIds(Array.from(new Set(visibleInventoryLines.map((line) => line.product.id))));
+  }
+
+  function applyBulkRest() {
+    const selected = inventoryLines.filter((line) => bulkSelectedIds.includes(line.product.id));
+    if (!canEditReport || selected.length === 0) return;
+
+    updateReport((report) => {
+      const nextItems = { ...report.items };
+      for (const line of selected) {
+        const value = parseOptionalQuantity(bulkRestValue, line.product);
+        nextItems[line.product.id] = {
+          ...nextItems[line.product.id],
+          productId: line.product.id,
+          incoming: nextItems[line.product.id]?.incoming ?? 0,
+          homeRest: value,
+          currentRest: value
+        };
+      }
+      return { ...report, items: nextItems };
+    });
+    setNotice(`Массово заполнено: ${selected.length}`);
+  }
+
+  function carryForwardCurrentRests() {
+    if (!canEditReport) return;
+    updateReport((report) => {
+      const nextItems = { ...report.items };
+      for (const line of inventoryLines) {
+        const value = parseQuantity(String(line.available), line.product);
+        nextItems[line.product.id] = {
+          ...nextItems[line.product.id],
+          productId: line.product.id,
+          incoming: nextItems[line.product.id]?.incoming ?? 0,
+          previousRest: line.previousRest,
+          homeRest: value,
+          currentRest: value
+        };
+      }
+      return { ...report, items: nextItems };
+    });
+    setNotice("Остатки перенесены: теперь меняйте только проданные позиции.");
+  }
+
+  function syncSelectedRevenueFromFact() {
+    const otherRevenue = cashColumns
+      .filter((cash) => cash.columnKey !== selectedCashColumn)
+      .reduce((total, cash) => total + cash.productRevenue, 0);
+    updateCash("productRevenue", Math.max(0, parseNumber(String(revenue - otherRevenue))));
+    setNotice("Выручка выбранного водителя сверена с продажами по факту.");
+  }
+
+  function resetRestsToZeroWithoutShortage() {
+    if (!canEditReport) return;
+    setState((current) => {
+      const existing = getReport(current, selectedDate, selectedPointId) ?? createEmptyReport(selectedDate, selectedPointId, selectedDriverId, current.products);
+      if (existing.closed) return current;
+
+      const zeroItems = { ...existing.items };
+      for (const line of calculateReportLines(current, existing)) {
+        zeroItems[line.product.id] = {
+          ...zeroItems[line.product.id],
+          productId: line.product.id,
+          incoming: zeroItems[line.product.id]?.incoming ?? 0,
+          homeRest: 0,
+          currentRest: 0
+        };
+      }
+
+      const zeroReport: DailyReport = { ...existing, items: zeroItems };
+      const zeroState = replaceReport(current, zeroReport);
+      const zeroRevenue = calculateReportRevenue(zeroState, zeroReport);
+      const currentCash = zeroReport.cashColumns[selectedCashColumn] ?? emptyCash(selectedCashColumn);
+      const cashWithRevenue = { ...currentCash, columnKey: selectedCashColumn, productRevenue: zeroRevenue };
+      const balancedCash = calculateCash(cashWithRevenue);
+      const finalReport: DailyReport = {
+        ...zeroReport,
+        cashColumns: {
+          ...zeroReport.cashColumns,
+          [selectedCashColumn]: {
+            ...cashWithRevenue,
+            handedOver: Math.max(0, balancedCash.shouldHandOver)
+          }
+        }
+      };
+      return replaceReport(current, finalReport);
+    });
+    setNotice("Остатки обнулены, касса выбранного водителя выровнена без недостачи.");
+  }
+
+  function updateDiscrepancy(productId: string, patch: Partial<ReportItemInput>) {
+    updateItem(productId, patch);
+  }
+
+  function generateDiscrepancyImage() {
+    if (discrepancyLines.length === 0) {
+      setNotice("Нет отмеченных расхождений для отчета.");
+      return;
+    }
+
+    const rowHeight = 54;
+    const width = 1280;
+    const height = 210 + discrepancyLines.length * rowHeight;
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+
+    context.fillStyle = "#10130e";
+    context.fillRect(0, 0, width, height);
+    context.fillStyle = "#55d3c1";
+    context.font = "700 36px Arial";
+    context.fillText("Отчет по расхождениям", 48, 62);
+    context.fillStyle = "#f5f1e8";
+    context.font = "600 22px Arial";
+    context.fillText(`${selectedPoint?.name ?? selectedPointId} · ${selectedDate}`, 48, 100);
+    context.fillStyle = "#9f9888";
+    context.font = "600 18px Arial";
+    context.fillText("Товар", 48, 158);
+    context.fillText("Приложение", 630, 158);
+    context.fillText("Водитель", 820, 158);
+    context.fillText("Разница", 1030, 158);
+
+    discrepancyLines.forEach((line, index) => {
+      const item = currentReport.items[line.product.id];
+      const y = 188 + index * rowHeight;
+      const driverRest = item?.driverRest;
+      const driverSale = item?.driverSale;
+      const restGap = typeof driverRest === "number" && typeof line.homeRest === "number" ? line.homeRest - driverRest : 0;
+      const saleGap = typeof driverSale === "number" ? line.sale - driverSale : 0;
+      context.fillStyle = index % 2 ? "#171912" : "#1c1d18";
+      context.fillRect(36, y - 28, width - 72, rowHeight - 6);
+      context.fillStyle = "#f5f1e8";
+      context.font = "600 18px Arial";
+      context.fillText(`${line.rowNumber}. ${line.product.name}`.slice(0, 58), 48, y);
+      context.fillStyle = "#d7d0bf";
+      context.fillText(`Ост. ${num(line.homeRest)} · Прод. ${num(line.sale)}`, 630, y);
+      context.fillText(`Ост. ${num(driverRest)} · Прод. ${num(driverSale)}`, 820, y);
+      context.fillStyle = restGap || saleGap ? "#ffb84d" : "#47c68a";
+      context.fillText(`Ост. ${num(restGap)} · Прод. ${num(saleGap)}`, 1030, y);
+    });
+
+    try {
+      const fileName = `discrepancies_${selectedDate}_${selectedPointId}.png`;
+      const url = canvas.toDataURL("image/png");
+      if (preparedDownload) URL.revokeObjectURL(preparedDownload.url);
+      setPreparedDownload({ url, fileName });
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setNotice("Изображение отчета по расхождениям готово и скачивается.");
+    } catch {
+      setNotice("Не удалось создать изображение отчета. Попробуйте отметить меньше позиций за один раз.");
+    }
+  }
+
+  async function handleTemplateImport(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const imported = await importExcelReport(state, file, { date: selectedDate, mode: importMode });
+      setState(imported.state);
+      setNotice(
+        `Импорт готов: создано ${imported.result.createdReports}, обновлено ${imported.result.updatedReports}.`
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Не удалось импортировать шаблон.");
+    }
+  }
+
+  async function checkSupabaseConnection() {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !anonKey) {
+      setServerCheck({ status: "error", message: "Supabase не настроен в .env" });
+      return;
+    }
+
+    setServerCheck({ status: "checking", message: "Проверяю соединение..." });
+    try {
+      const response = await fetch(`${url}/rest/v1/`, {
+        headers: {
+          apikey: anonKey,
+          Authorization: `Bearer ${anonKey}`
+        }
+      });
+      setServerCheck({
+        status: response.ok ? "ok" : "error",
+        message: response.ok ? "Связь с Supabase есть" : `Supabase ответил: ${response.status}`
+      });
+    } catch {
+      setServerCheck({ status: "error", message: "Нет связи с Supabase" });
+    }
   }
 
   function addPoint() {
@@ -769,23 +1069,51 @@ export default function Home() {
     startQuick(undefined, null);
   }
 
-  function saveQuickValue(value: string) {
+  function saveQuickValue(value: string, input?: HTMLInputElement) {
     if (!quickLine) return;
-    updateItem(quickLine.product.id, { homeRest: parseOptionalNumber(value) });
+    const normalized = normalizeQuantityInput(value, quickLine.product);
+    const parsed = parseOptionalQuantity(normalized, quickLine.product);
+    quickDraftRef.current = normalized;
+    if (input && input.value !== normalized) input.value = normalized;
+    setQuickPreviewRest(parsed);
+    scheduleQuickCommit(quickLine.product.id, parsed);
   }
 
-  function adjustQuickRest(delta: number) {
+  function adjustQuickRest(direction: -1 | 1) {
     if (!quickLine || !canEditReport) return;
-    const current = typeof quickLine.homeRest === "number" ? quickLine.homeRest : 0;
-    updateItem(quickLine.product.id, { homeRest: Math.max(0, parseNumber(String(current + delta))) });
+    const current = parseOptionalQuantity(quickDraftRef.current, quickLine.product) ?? quickLine.homeRest ?? 0;
+    const next = Math.max(0, parseQuantity(String(current + direction * quantityStep(quickLine.product)), quickLine.product));
+    const formatted = formatQuantity(next, quickLine.product);
+    quickDraftRef.current = formatted;
+    if (quickInputRef.current) quickInputRef.current.value = formatted;
+    setQuickPreviewRest(next);
+    scheduleQuickCommit(quickLine.product.id, next);
   }
 
-  function adjustIncoming(productId: string, currentValue: number, delta: number) {
+  function adjustIncoming(productId: string, direction: -1 | 1) {
     if (!canEditReport) return;
-    updateItem(productId, { incoming: Math.max(0, parseNumber(String(currentValue + delta))) });
+    const product = state.products.find((item) => item.id === productId);
+    if (!product) return;
+    updateReport((report) => {
+      const currentItem = report.items[productId] ?? { productId, incoming: 0 };
+      const currentValue = typeof currentItem.incoming === "number" ? currentItem.incoming : 0;
+      const next = Math.max(0, parseQuantity(String(currentValue + direction * quantityStep(product)), product));
+      return {
+        ...report,
+        items: {
+          ...report.items,
+          [productId]: {
+            ...currentItem,
+            productId,
+            incoming: next
+          }
+        }
+      };
+    });
   }
 
   function goNext() {
+    flushQuickCommit();
     if (quickIndex < quickLines.length - 1) {
       setQuickIndex((current) => current + 1);
       return;
@@ -795,65 +1123,8 @@ export default function Home() {
   }
 
   function goPrev() {
+    flushQuickCommit();
     setQuickIndex((current) => Math.max(current - 1, 0));
-  }
-
-  function startVoice() {
-    if (!quickLine) return;
-    const speechWindow = window as unknown as {
-      SpeechRecognition?: SpeechRecognitionConstructor;
-      webkitSpeechRecognition?: SpeechRecognitionConstructor;
-    };
-    const SpeechRecognitionCtor = speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
-
-    if (!SpeechRecognitionCtor) {
-      setNotice("Голосовой ввод не поддерживается в этом браузере.");
-      return;
-    }
-
-    const recognition = new SpeechRecognitionCtor();
-    recognition.lang = "ru-RU";
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-    recognition.onstart = () => setVoiceActive(true);
-    recognition.onend = () => setVoiceActive(false);
-    recognition.onerror = () => {
-      setVoiceActive(false);
-      setNotice("Не удалось распознать голос.");
-    };
-    recognition.onresult = (event: SpeechRecognitionResultEventLike) => {
-      const transcript = event.results?.[0]?.[0]?.transcript ?? "";
-      const value = extractSpokenNumber(transcript);
-      if (typeof value !== "number") {
-        setNotice("Число не распознано.");
-        return;
-      }
-      updateItem(quickLine.product.id, { homeRest: value });
-      setNotice(`Остаток ${value} сохранен голосом.`);
-    };
-    recognition.start();
-  }
-
-  function handleScanValue(rawValue: string) {
-    const query = rawValue.trim().toLowerCase();
-    if (!query) return;
-    const match = inventoryLines.find((line) => {
-      const excelRows = Object.values(line.product.excelRowsByPoint ?? {}).map(String);
-      return (
-        line.product.id.toLowerCase() === query ||
-        line.product.id.toLowerCase().includes(query) ||
-        line.product.name.toLowerCase().includes(query) ||
-        String(line.rowNumber) === query ||
-        excelRows.includes(query)
-      );
-    });
-    if (!match) {
-      setNotice(`Товар по коду "${rawValue}" не найден.`);
-      return;
-    }
-    setScannerOpen(false);
-    setScannerQuery("");
-    startQuick(match.product.id, null);
   }
 
   function addTransfer() {
@@ -931,6 +1202,11 @@ export default function Home() {
 
   const closeDisabled = currentReport.closed || missingCount > 0 || errorWarningCount > 0;
   const quickTone = quickLine ? lineTone(quickLine) : "empty";
+  const quickItem = quickLine ? currentReport.items[quickLine.product.id] : undefined;
+  const quickPreviewSale =
+    quickLine && typeof quickPreviewRest === "number" ? parseNumber(String(quickLine.available - quickPreviewRest)) : undefined;
+  const quickPreviewAmount =
+    quickLine && typeof quickPreviewSale === "number" ? parseNumber(String(quickPreviewSale * quickLine.product.price)) : undefined;
 
   return (
     <main className="app-shell">
@@ -1006,7 +1282,7 @@ export default function Home() {
           <div className="quiet-panel">
             <div>
               <span className="overline">Сегодня все точки</span>
-              <strong>{currency(dashboard.daySales)}</strong>
+              <strong>{currency(dashboardDaySales)}</strong>
             </div>
             <BarChart3 size={22} />
           </div>
@@ -1022,9 +1298,6 @@ export default function Home() {
                   <span className="overline">Инвентаризация</span>
                   <h2>Выберите категорию</h2>
                 </div>
-                <button type="button" className="icon-button" onClick={() => setScannerOpen(true)} aria-label="Сканировать штрих-код">
-                  <ScanLine size={20} />
-                </button>
               </div>
 
               <div className="view-switch" aria-label="Вид инвентаризации">
@@ -1087,9 +1360,6 @@ export default function Home() {
                   <span className="overline">Инвентаризация</span>
                   <h2>Все товары</h2>
                 </div>
-                <button type="button" className="icon-button" onClick={() => setScannerOpen(true)} aria-label="Сканировать штрих-код">
-                  <ScanLine size={20} />
-                </button>
               </div>
 
               <div className="view-switch" aria-label="Вид инвентаризации">
@@ -1111,13 +1381,46 @@ export default function Home() {
                 />
               </label>
 
+              <div className="bulk-panel">
+                <div className="panel-title">
+                  <strong>Массовое заполнение</strong>
+                  <span>{bulkSelectedIds.length}</span>
+                </div>
+                <div className="bulk-controls">
+                  <input
+                    inputMode="decimal"
+                    value={bulkRestValue}
+                    onChange={(event) => setBulkRestValue(event.target.value)}
+                    placeholder="Одинаковый остаток"
+                    disabled={!canEditReport}
+                  />
+                  <button type="button" className="secondary-action" onClick={selectVisibleBulkProducts} disabled={!canEditReport}>
+                    Выбрать видимые
+                  </button>
+                  <button type="button" className="secondary-action" onClick={() => setBulkSelectedIds([])}>
+                    Очистить
+                  </button>
+                  <button type="button" className="primary-action" onClick={applyBulkRest} disabled={!canEditReport || bulkSelectedIds.length === 0}>
+                    Применить
+                  </button>
+                </div>
+              </div>
+
               <div className="inventory-list">
-                {(search ? searchResults : inventoryLines).map((line) => (
+                {visibleInventoryLines.map((line) => (
                   <div className={`inventory-list-row ${lineTone(line)}`} key={line.product.id}>
-                    <button type="button" onClick={() => startQuick(line.product.id, null)}>
-                      <span className={`dot ${lineTone(line)}`} />
-                      <strong>{line.rowNumber}. {line.product.name}</strong>
-                    </button>
+                    <div className="inventory-product-cell">
+                      <button
+                        type="button"
+                        className={bulkSelectedIds.includes(line.product.id) ? "select-box active" : "select-box"}
+                        onClick={() => toggleBulkProduct(line.product.id)}
+                        aria-label="Выбрать товар"
+                      />
+                      <button type="button" onClick={() => startQuick(line.product.id, null)}>
+                        <span className={`dot ${lineTone(line)}`} />
+                        <strong>{line.rowNumber}. {line.product.name}</strong>
+                      </button>
+                    </div>
                     <span>{num(line.previousRest)}</span>
                     <span>{num(line.incoming)}</span>
                     <span>{typeof line.homeRest === "number" ? num(line.homeRest) : "—"}</span>
@@ -1168,15 +1471,28 @@ export default function Home() {
                   <label className="rest-input">
                     <span>Введите остаток</span>
                     <div className="rest-stepper">
-                      <button type="button" onClick={() => adjustQuickRest(-0.5)} disabled={!canEditReport} aria-label="Уменьшить остаток">
+                      <button
+                        type="button"
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          adjustQuickRest(-1);
+                        }}
+                        onClick={(event) => {
+                          if (event.detail === 0) adjustQuickRest(-1);
+                        }}
+                        disabled={!canEditReport}
+                        aria-label="Уменьшить остаток"
+                      >
                         <Minus size={20} />
                       </button>
                       <input
+                        key={quickLine.product.id}
                         ref={quickInputRef}
-                        inputMode="decimal"
+                        inputMode={quickLine && allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
                         type="text"
-                        value={num(quickLine.homeRest)}
-                        onChange={(event) => saveQuickValue(event.target.value)}
+                        defaultValue={formatQuantity(quickLine.homeRest, quickLine.product)}
+                        onChange={(event) => saveQuickValue(event.currentTarget.value, event.currentTarget)}
+                        onBlur={flushQuickCommit}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
                             event.preventDefault();
@@ -1184,17 +1500,28 @@ export default function Home() {
                           }
                           if (event.key === "ArrowUp") {
                             event.preventDefault();
-                            adjustQuickRest(0.5);
+                            adjustQuickRest(1);
                           }
                           if (event.key === "ArrowDown") {
                             event.preventDefault();
-                            adjustQuickRest(-0.5);
+                            adjustQuickRest(-1);
                           }
                         }}
                         disabled={!canEditReport}
                         aria-label="Остаток товара"
                       />
-                      <button type="button" onClick={() => adjustQuickRest(0.5)} disabled={!canEditReport} aria-label="Увеличить остаток">
+                      <button
+                        type="button"
+                        onPointerDown={(event) => {
+                          event.preventDefault();
+                          adjustQuickRest(1);
+                        }}
+                        onClick={(event) => {
+                          if (event.detail === 0) adjustQuickRest(1);
+                        }}
+                        disabled={!canEditReport}
+                        aria-label="Увеличить остаток"
+                      >
                         <Plus size={20} />
                       </button>
                     </div>
@@ -1203,12 +1530,55 @@ export default function Home() {
                   <div className="auto-calc">
                     <div>
                       <span>Продано</span>
-                      <strong>{typeof quickLine.homeRest === "number" ? num(quickLine.sale) : "—"}</strong>
+                      <strong>{typeof quickPreviewSale === "number" ? num(quickPreviewSale) : "—"}</strong>
                     </div>
                     <div>
                       <span>Сумма</span>
-                      <strong>{typeof quickLine.homeRest === "number" ? currency(quickLine.amount) : "—"}</strong>
+                      <strong>{typeof quickPreviewAmount === "number" ? currency(quickPreviewAmount) : "—"}</strong>
                     </div>
+                  </div>
+
+                  <div className={quickItem?.flagged ? "discrepancy-card active" : "discrepancy-card"}>
+                    <button
+                      type="button"
+                      className="secondary-wide"
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => updateDiscrepancy(quickLine.product.id, { flagged: !quickItem?.flagged })}
+                      disabled={!canEditReport}
+                    >
+                      <AlertTriangle size={17} />
+                      {quickItem?.flagged ? "Расхождение отмечено" : "Отметить расхождение"}
+                    </button>
+                    {quickItem?.flagged && (
+                      <div className="discrepancy-fields">
+                        <label>
+                          Остаток у водителя
+                          <input
+                            inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
+                            value={formatQuantity(quickItem.driverRest, quickLine.product)}
+                            onChange={(event) =>
+                              updateDiscrepancy(quickLine.product.id, {
+                                driverRest: parseOptionalQuantity(event.target.value, quickLine.product)
+                              })
+                            }
+                            disabled={!canEditReport}
+                          />
+                        </label>
+                        <label>
+                          Продажа у водителя
+                          <input
+                            inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
+                            value={formatQuantity(quickItem.driverSale, quickLine.product)}
+                            onChange={(event) =>
+                              updateDiscrepancy(quickLine.product.id, {
+                                driverSale: parseOptionalQuantity(event.target.value, quickLine.product)
+                              })
+                            }
+                            disabled={!canEditReport}
+                          />
+                        </label>
+                      </div>
+                    )}
                   </div>
 
                   {quickTone === "warn" && (
@@ -1222,11 +1592,7 @@ export default function Home() {
                     <button type="button" className="secondary-action" onClick={goPrev} disabled={quickIndex === 0}>
                       <ArrowLeft size={18} />
                     </button>
-                    <button type="button" className={voiceActive ? "secondary-action active" : "secondary-action"} onClick={startVoice}>
-                      <Mic size={18} />
-                      Голос
-                    </button>
-                    <button type="button" className="primary-action" onClick={goNext}>
+                    <button type="button" className="primary-action" onPointerDown={(event) => event.preventDefault()} onClick={goNext}>
                       Следующий
                       <ArrowRight size={18} />
                     </button>
@@ -1280,7 +1646,14 @@ export default function Home() {
               <div>
                 <button
                   type="button"
-                  onClick={() => setTransferForm((current) => ({ ...current, quantity: Math.max(0.5, current.quantity - 0.5) }))}
+                  onClick={() =>
+                    setTransferForm((current) => {
+                      const product = state.products.find((item) => item.id === current.productId);
+                      const step = quantityStep(product);
+                      const quantity = product ? parseQuantity(String(current.quantity - step), product, step) : current.quantity - step;
+                      return { ...current, quantity: Math.max(step, quantity) };
+                    })
+                  }
                   aria-label="Уменьшить количество"
                 >
                   <Minus size={18} />
@@ -1288,7 +1661,14 @@ export default function Home() {
                 <strong>{num(transferForm.quantity)}</strong>
                 <button
                   type="button"
-                  onClick={() => setTransferForm((current) => ({ ...current, quantity: current.quantity + 0.5 }))}
+                  onClick={() =>
+                    setTransferForm((current) => {
+                      const product = state.products.find((item) => item.id === current.productId);
+                      const step = quantityStep(product);
+                      const quantity = product ? parseQuantity(String(current.quantity + step), product, step) : current.quantity + step;
+                      return { ...current, quantity };
+                    })
+                  }
                   aria-label="Увеличить количество"
                 >
                   <Plus size={18} />
@@ -1387,27 +1767,27 @@ export default function Home() {
                   <span>Было {num(line.previousRest)} · доступно {num(line.available)}</span>
                 </div>
                 <div className="small-stepper">
-                  <button type="button" onClick={() => adjustIncoming(line.product.id, line.incoming, -0.5)} disabled={!canEditReport} aria-label="Уменьшить приход">
+                  <button type="button" onClick={() => adjustIncoming(line.product.id, -1)} disabled={!canEditReport} aria-label="Уменьшить приход">
                     <Minus size={16} />
                   </button>
                   <input
-                    inputMode="decimal"
-                    value={num(line.incoming)}
-                    onChange={(event) => updateItem(line.product.id, { incoming: parseNumber(event.target.value) })}
+                    inputMode={allowsDecimalProduct(line.product) ? "decimal" : "numeric"}
+                    value={formatQuantity(line.incoming, line.product)}
+                    onChange={(event) => updateItem(line.product.id, { incoming: parseQuantity(event.target.value, line.product) })}
                     onKeyDown={(event) => {
                       if (event.key === "ArrowUp") {
                         event.preventDefault();
-                        adjustIncoming(line.product.id, line.incoming, 0.5);
+                        adjustIncoming(line.product.id, 1);
                       }
                       if (event.key === "ArrowDown") {
                         event.preventDefault();
-                        adjustIncoming(line.product.id, line.incoming, -0.5);
+                        adjustIncoming(line.product.id, -1);
                       }
                     }}
                     disabled={!canEditReport}
                     aria-label={`Приход ${line.product.name}`}
                   />
-                  <button type="button" onClick={() => adjustIncoming(line.product.id, line.incoming, 0.5)} disabled={!canEditReport} aria-label="Увеличить приход">
+                  <button type="button" onClick={() => adjustIncoming(line.product.id, 1)} disabled={!canEditReport} aria-label="Увеличить приход">
                     <Plus size={16} />
                   </button>
                 </div>
@@ -1428,12 +1808,21 @@ export default function Home() {
           </div>
 
           <div className="finance-grid">
-            <Metric label="Выручка" value={currency(cashTotal.productRevenue)} tone="neutral" />
+            <Metric label="Факт продаж" value={currency(revenue)} tone="neutral" />
+            <Metric label="Водители" value={currency(cashTotal.productRevenue)} tone={Math.abs(financeRevenueGap) > 0.01 ? "warn" : "good"} />
+            <Metric label="Разница факт" value={currency(financeRevenueGap)} tone={Math.abs(financeRevenueGap) > 0.01 ? "bad" : "good"} />
             <Metric label="Сдали" value={currency(cashTotal.handedOver)} tone="neutral" />
             <Metric label="Скидки" value={currency(financeTotals.discounts)} tone="warn" />
             <Metric label="Расходы" value={currency(financeTotals.expenses)} tone="warn" />
             <Metric label="Недостача" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
           </div>
+
+          {Math.abs(financeRevenueGap) > 0.01 && (
+            <div className="warning-note">
+              <AlertTriangle size={18} />
+              Выручка водителей не совпадает с продажами по факту.
+            </div>
+          )}
 
           <div className="driver-tabs" aria-label="Водители">
             {cashColumnKeys.map((columnKey) => {
@@ -1481,6 +1870,10 @@ export default function Home() {
                 />
               </label>
             </div>
+            <button type="button" className="secondary-wide" onClick={syncSelectedRevenueFromFact} disabled={!canEditReport}>
+              <RefreshCcw size={18} />
+              Выровнять выбранного водителя по факту
+            </button>
 
             <details>
               <summary>
@@ -1629,6 +2022,10 @@ export default function Home() {
             </div>
             <ReportRow label="Вчерашний отчет закрыт" value={carryoverAudit.previousClosed ? "Да" : "Нет"} tone={carryoverAudit.previousClosed ? "good" : "bad"} />
             <ReportRow label="Перенесено позиций" value={`${carryoverAudit.currentPreviousRestCount} / ${inventoryLines.length}`} />
+            <button type="button" className="secondary-wide" onClick={carryForwardCurrentRests} disabled={!canEditReport}>
+              <RefreshCcw size={18} />
+              Перенести остатки на сегодня
+            </button>
           </div>
 
           <div className="settings-panel">
@@ -1646,6 +2043,45 @@ export default function Home() {
                 ))}
               </select>
             </label>
+            <input
+              ref={importInputRef}
+              className="hidden-file-input"
+              type="file"
+              accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+              onChange={handleTemplateImport}
+            />
+            <label>
+              Режим импорта
+              <select value={importMode} onChange={(event) => setImportMode(event.target.value as ImportMode)}>
+                <option value="merge">Обновить найденные ячейки</option>
+                <option value="replace">Заменить отчет</option>
+              </select>
+            </label>
+            <div className="settings-actions">
+              <button type="button" className="secondary-action" onClick={() => importInputRef.current?.click()}>
+                <Upload size={18} />
+                Импорт из шаблона
+              </button>
+              <button type="button" className="secondary-action" onClick={generateDiscrepancyImage} disabled={discrepancyLines.length === 0}>
+                <ImageDown size={18} />
+                Отчет расхождений
+              </button>
+              <button type="button" className="secondary-action" onClick={resetRestsToZeroWithoutShortage} disabled={!canEditReport}>
+                <Eraser size={18} />
+                Обнулить без недостачи
+              </button>
+              <button type="button" className="secondary-action" onClick={checkSupabaseConnection} disabled={serverCheck.status === "checking"}>
+                <Wifi size={18} />
+                Проверить Supabase
+              </button>
+              <button type="button" className="secondary-action" onClick={() => setUiSoundEnabled((current) => !current)}>
+                {uiSoundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                {uiSoundEnabled ? "Звук включен" : "Звук выключен"}
+              </button>
+            </div>
+            <div className={`server-status ${serverCheck.status}`}>
+              {serverCheck.message}
+            </div>
             <div className="download-actions">
               <button type="button" className="secondary-action" onClick={() => exportExcel("single")}>
                 <Download size={18} />
@@ -1818,35 +2254,6 @@ export default function Home() {
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {scannerOpen && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Сканирование штрих-кода">
-          <div className="scanner-sheet">
-            <div className="screen-head">
-              <div>
-                <span className="overline">Сканер</span>
-                <h2>Открыть товар</h2>
-              </div>
-              <button type="button" className="icon-button" onClick={() => setScannerOpen(false)} aria-label="Закрыть сканер">
-                <X size={20} />
-              </button>
-            </div>
-            <video ref={videoRef} playsInline muted />
-            <label className="search-field compact">
-              <ScanLine size={17} />
-              <input
-                value={scannerQuery}
-                onChange={(event) => setScannerQuery(event.target.value)}
-                placeholder="Код или название"
-                aria-label="Код или название товара"
-              />
-            </label>
-            <button type="button" className="primary-cta" onClick={() => handleScanValue(scannerQuery)}>
-              Открыть товар
-            </button>
           </div>
         </div>
       )}

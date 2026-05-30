@@ -35,6 +35,10 @@ export type ReportItemInput = {
   homeRest?: number;
   extraRequest?: number;
   currentRest?: number;
+  flagged?: boolean;
+  driverRest?: number;
+  driverSale?: number;
+  discrepancyNote?: string;
 };
 
 export type CashColumnKey = "E" | "F" | "G" | "H" | "I" | "J" | "K";
