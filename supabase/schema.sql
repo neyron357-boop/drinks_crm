@@ -1,4 +1,6 @@
--- Legacy snapshot. Prefer: supabase/migrations/20260530120000_ledger_schema.sql
+-- Legacy snapshot kept only for reference.
+-- Source of truth: run files in supabase/migrations in timestamp order.
+-- Latest operational controls: 20260530183000_operational_controls.sql
 
 create extension if not exists pgcrypto;
 
