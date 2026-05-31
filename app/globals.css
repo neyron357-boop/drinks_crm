@@ -739,15 +739,89 @@ label {
   font-weight: 900;
 }
 
+.quick-counter {
+  color: var(--text);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.report-photo-panel,
+.receipt-import-panel,
+.receipt-review {
+  position: relative;
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 10px;
+}
+
+.photo-viewer {
+  position: relative;
+  display: grid;
+  height: min(34vh, 260px);
+  min-height: 150px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: #0b0d11;
+  touch-action: none;
+}
+
+.photo-viewer img {
+  max-width: 100%;
+  max-height: 100%;
+  transform-origin: center;
+  transition: transform 0.08s linear;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.photo-empty {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.photo-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.photo-actions button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.photo-actions span {
+  min-width: 0;
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 850;
+}
+
 .quick-product {
   display: flex;
-  min-height: 146px;
+  min-height: 132px;
   flex-direction: column;
   justify-content: space-between;
   border: 0;
   border-radius: var(--radius);
   background: var(--surface);
   padding: 15px;
+}
+
+.quick-row-number {
+  color: var(--teal);
+  font-size: 34px;
+  line-height: 1;
 }
 
 .quick-product.done {
@@ -832,6 +906,10 @@ label {
   gap: 8px;
 }
 
+.rest-stepper.solo {
+  grid-template-columns: 1fr;
+}
+
 .rest-stepper button,
 .small-stepper button {
   display: grid;
@@ -861,6 +939,141 @@ label {
   font-weight: 950;
   letter-spacing: 0;
   text-align: center;
+}
+
+.number-pad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.number-pad button {
+  min-height: 54px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 950;
+}
+
+.number-pad button:active {
+  background: var(--teal-soft);
+  transform: none;
+}
+
+.receipt-photo-preview {
+  display: grid;
+  height: 138px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: #0b0d11;
+}
+
+.receipt-photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.receipt-review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.receipt-review-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+.receipt-review-row strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.focus-mode .photo-viewer {
+  height: 12vh;
+  min-height: 64px;
+  max-height: 88px;
+}
+
+.focus-mode .quick-fill {
+  gap: 8px;
+}
+
+.focus-mode .report-photo-panel {
+  padding: 6px;
+}
+
+.focus-mode .photo-actions {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  margin-top: 0;
+}
+
+.focus-mode .photo-actions button {
+  width: 34px;
+  height: 34px;
+}
+
+.focus-mode .quick-product {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+}
+
+.focus-mode .quick-product h2 {
+  min-height: 0;
+  margin-top: 0;
+  font-size: 18px;
+  -webkit-line-clamp: 1;
+}
+
+.focus-mode .quick-row-number {
+  font-size: 34px;
+}
+
+.focus-mode .quick-facts {
+  grid-template-columns: 70px;
+  margin-top: 0;
+}
+
+.focus-mode .quick-facts div {
+  padding: 5px 7px;
+}
+
+.focus-mode .rest-input {
+  gap: 6px;
+}
+
+.focus-mode .rest-input input {
+  height: 46px;
+  font-size: 30px;
+}
+
+.focus-mode .number-pad {
+  gap: 6px;
+}
+
+.focus-mode .number-pad button {
+  min-height: 31px;
+}
+
+.focus-mode .quick-extra {
+  display: none;
+}
+
+.focus-mode .quick-actions .secondary-action,
+.focus-mode .quick-actions .primary-action {
+  min-height: 44px;
 }
 
 .receipt-summary {
@@ -943,7 +1156,7 @@ label {
 
 .quick-actions {
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr);
+  grid-template-columns: 54px 54px minmax(0, 1fr);
   gap: 8px;
   margin-top: auto;
 }
@@ -1557,7 +1770,20 @@ label {
 }
 
 .product-admin-row {
-  grid-template-columns: minmax(180px, 1.4fr) 76px 76px minmax(112px, 0.8fr) auto 38px;
+  grid-template-columns: 54px minmax(180px, 1.4fr) 76px 76px minmax(112px, 0.8fr) 72px 64px auto auto 38px;
+  overflow-x: auto;
+}
+
+.order-controls {
+  display: grid;
+  grid-template-columns: repeat(2, 25px);
+  gap: 4px;
+}
+
+.order-controls button {
+  width: 25px;
+  min-height: 34px;
+  padding: 0;
 }
 
 .mini-toggle {
@@ -2043,6 +2269,10 @@ label {
 
   .rest-stepper {
     grid-template-columns: 46px minmax(0, 1fr) 46px;
+  }
+
+  .rest-stepper.solo {
+    grid-template-columns: 1fr;
   }
 
   .rest-stepper button {

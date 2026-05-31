@@ -117,7 +117,7 @@ export function calculateReportLines(state: AppState, report: DailyReport): Repo
 
     return {
       product,
-      rowNumber: product.numbersByPoint?.[report.pointId] ?? index + 1,
+      rowNumber: product.shelfOrder ?? product.numbersByPoint?.[report.pointId] ?? index + 1,
       previousRest,
       incoming,
       movement,
