@@ -2001,17 +2001,6 @@ export default function Home() {
                       Подробнее
                       <ChevronDown size={16} />
                     </summary>
-                    <div className="auto-calc no-ios-callout">
-                      <div>
-                        <span>Продано</span>
-                        <strong>{typeof quickPreviewSale === "number" ? num(quickPreviewSale) : "—"}</strong>
-                      </div>
-                      <div>
-                        <span>Сумма</span>
-                        <strong>{typeof quickPreviewAmount === "number" ? currency(quickPreviewAmount) : "—"}</strong>
-                      </div>
-                    </div>
-
                     <div className={quickItem?.flagged ? "discrepancy-card active no-ios-callout" : "discrepancy-card no-ios-callout"}>
                       <button
                         type="button"
