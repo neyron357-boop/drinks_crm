@@ -1862,43 +1862,45 @@ export default function Home() {
               <input ref={reportPhotoInputRef} className="hidden-file-input" type="file" accept="image/*" onChange={handleReportPhotoFile} />
 
               <div className="report-photo-panel no-ios-callout">
-                <div
-                  ref={reportPhotoContainerRef}
-                  className={reportPhotoUrl ? "photo-viewer has-photo" : "photo-viewer"}
-                  onPointerDown={handleReportPhotoPointerDown}
-                  onPointerMove={handleReportPhotoPointerMove}
-                  onPointerUp={handleReportPhotoPointerUp}
-                  onPointerCancel={handleReportPhotoPointerUp}
-                  onDoubleClick={toggleReportPhotoZoom}
-                >
-                  {reportPhotoUrl ? (
-                    <img
-                      ref={reportPhotoImageRef}
-                      src={reportPhotoUrl}
-                      alt="Фото отчета"
-                      style={{
-                        transform: `translate3d(${reportPhotoTransform.x}px, ${reportPhotoTransform.y}px, 0) scale(${reportPhotoTransform.scale})`
-                      }}
-                    />
-                  ) : (
-                    <div className="photo-empty">
-                      <ImagePlus size={24} />
-                      <span>Фото отчета</span>
-                    </div>
-                  )}
+                <div className="photo-viewport">
+                  <div
+                    ref={reportPhotoContainerRef}
+                    className={reportPhotoUrl ? "photo-viewer has-photo" : "photo-viewer"}
+                    onPointerDown={handleReportPhotoPointerDown}
+                    onPointerMove={handleReportPhotoPointerMove}
+                    onPointerUp={handleReportPhotoPointerUp}
+                    onPointerCancel={handleReportPhotoPointerUp}
+                    onDoubleClick={toggleReportPhotoZoom}
+                  >
+                    {reportPhotoUrl ? (
+                      <img
+                        ref={reportPhotoImageRef}
+                        src={reportPhotoUrl}
+                        alt="Фото отчета"
+                        style={{
+                          transform: `translate3d(${reportPhotoTransform.x}px, ${reportPhotoTransform.y}px, 0) scale(${reportPhotoTransform.scale})`
+                        }}
+                      />
+                    ) : (
+                      <div className="photo-empty">
+                        <ImagePlus size={24} />
+                        <span>Фото отчета</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  className="photo-speech-toggle"
-                  onClick={() => setSpeechEnabled((current) => !current)}
-                  aria-label={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
-                  title={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
-                >
-                  {speechEnabled ? <Volume2 size={22} /> : <VolumeX size={22} />}
-                </button>
-                <div className="photo-actions">
+
+                <div className="photo-toolbar">
+                  <button
+                    type="button"
+                    onClick={() => setSpeechEnabled((current) => !current)}
+                    aria-label={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
+                    title={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
+                  >
+                    {speechEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                  </button>
                   <button type="button" onClick={() => reportPhotoInputRef.current?.click()} aria-label="Галерея" title="Галерея">
-                    <ImagePlus size={18} />
+                    <ImagePlus size={20} />
                   </button>
                   <button
                     type="button"
@@ -1906,12 +1908,11 @@ export default function Home() {
                     aria-label="Вставить из буфера"
                     title="Вставить из буфера"
                   >
-                    <ClipboardPaste size={18} />
+                    <ClipboardPaste size={20} />
                   </button>
                   <button type="button" onClick={resetReportPhotoPosition} aria-label="Сбросить фото" title="Сбросить фото">
-                    <RefreshCcw size={18} />
+                    <RefreshCcw size={20} />
                   </button>
-                  {reportClipboardState === "found" && <span>Найдено изображение в буфере</span>}
                 </div>
               </div>
 
@@ -1995,73 +1996,6 @@ export default function Home() {
                       </button>
                     ))}
                   </div>
-
-                  <details className="quick-extra no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}>
-                    <summary>
-                      Подробнее
-                      <ChevronDown size={16} />
-                    </summary>
-                    <div className="auto-calc no-ios-callout">
-                      <div>
-                        <span>Продано</span>
-                        <strong>{typeof quickPreviewSale === "number" ? num(quickPreviewSale) : "—"}</strong>
-                      </div>
-                      <div>
-                        <span>Сумма</span>
-                        <strong>{typeof quickPreviewAmount === "number" ? currency(quickPreviewAmount) : "—"}</strong>
-                      </div>
-                    </div>
-
-                    <div className={quickItem?.flagged ? "discrepancy-card active no-ios-callout" : "discrepancy-card no-ios-callout"}>
-                      <button
-                        type="button"
-                        className="secondary-wide no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
-                        onPointerDown={(event) => event.preventDefault()}
-                        onClick={() => updateDiscrepancy(quickLine.product.id, { flagged: !quickItem?.flagged })}
-                        disabled={!canEditReport}
-                      >
-                        <AlertTriangle size={17} />
-                        {quickItem?.flagged ? "Расхождение отмечено" : "Отметить расхождение"}
-                      </button>
-                      {quickItem?.flagged && (
-                        <div className="discrepancy-fields">
-                          <label>
-                            Остаток у водителя
-                            <input
-                              inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
-                              value={formatQuantity(quickItem.driverRest, quickLine.product)}
-                              onChange={(event) =>
-                                updateDiscrepancy(quickLine.product.id, {
-                                  driverRest: parseOptionalQuantity(event.target.value, quickLine.product)
-                                })
-                              }
-                              disabled={!canEditReport}
-                            />
-                          </label>
-                          <label>
-                            Продажа у водителя
-                            <input
-                              inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
-                              value={formatQuantity(quickItem.driverSale, quickLine.product)}
-                              onChange={(event) =>
-                                updateDiscrepancy(quickLine.product.id, {
-                                  driverSale: parseOptionalQuantity(event.target.value, quickLine.product)
-                                })
-                              }
-                              disabled={!canEditReport}
-                            />
-                          </label>
-                        </div>
-                      )}
-                    </div>
-
-                    {quickTone === "warn" && (
-                      <div className="warning-note">
-                        <AlertTriangle size={18} />
-                        Проверьте данные
-                      </div>
-                    )}
-                  </details>
 
                   <div className="quick-actions">
                     <button type="button" className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={goPrev} disabled={quickIndex === 0}>

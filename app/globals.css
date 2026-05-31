@@ -27,11 +27,15 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 html {
   width: 100%;
   min-width: 320px;
-  min-height: 100%;
-  overflow-x: hidden;
   background: var(--bg);
   -webkit-text-size-adjust: 100%;
   touch-action: manipulation;
@@ -39,9 +43,7 @@ html {
 
 body {
   width: 100%;
-  min-height: 100%;
   margin: 0;
-  overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -187,22 +189,25 @@ label {
 .app-shell {
   position: relative;
   width: min(100%, 480px);
-  min-height: 100vh;
+  height: 100%;
   margin: 0 auto;
   padding: 10px 12px calc(var(--bottom-nav-height) + 22px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .app-shell.focus-mode {
   width: min(100%, 390px);
   height: 100dvh;
-  min-height: 100dvh;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overscroll-behavior: none;
   background:
     radial-gradient(circle at 50% 10%, rgba(32, 77, 110, 0.18), transparent 35%),
     linear-gradient(180deg, #071321 0%, #08111d 100%);
-  padding: 4px 10px calc(8px + env(safe-area-inset-bottom));
+  padding: 8px 12px calc(env(safe-area-inset-bottom) + 10px);
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
 }
 
@@ -1177,73 +1182,109 @@ label {
   max-height: none;
   border-radius: 16px;
   background: #0d1725;
+  overflow: hidden;
+}
+
+.app-shell.focus-mode .inventory-screen {
+  height: 100%;
 }
 
 .focus-mode .quick-fill {
   display: grid;
   height: 100%;
-  min-height: 0;
-  grid-template-rows: 56px minmax(260px, 1fr) 64px 68px 42px 252px 64px;
-  gap: 3px;
+  max-height: 100dvh;
+  grid-template-rows: 72px minmax(150px, 24vh) 86px 86px 56px 1fr 72px;
+  gap: 8px;
   box-sizing: border-box;
   -webkit-touch-callout: none;
   user-select: none;
   -webkit-user-select: none;
+  overflow: hidden;
 }
 
 .focus-mode .report-photo-panel {
-  position: relative;
-  min-height: 260px;
+  display: grid;
+  grid-template-rows: 1fr 44px;
+  height: 100%;
+  min-height: 0;
   border: 1px solid #1c2940;
   border-radius: 20px;
   background: #0d1725;
-  padding: 6px;
+  padding: 0;
   overflow: hidden;
+  flex-shrink: 1;
+}
+
+.focus-mode .photo-viewport {
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.focus-mode .photo-viewer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #0b0d11;
+  touch-action: none;
+  overscroll-behavior: contain;
 }
 
 .focus-mode .photo-viewer img {
   width: 100%;
-  min-height: 100%;
-  object-fit: cover;
-  border-radius: 16px;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
 }
 
 .photo-speech-toggle {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 2;
   display: grid;
-  width: 52px;
-  height: 52px;
+  width: 36px;
+  height: 36px;
   place-items: center;
-  border-radius: 999px;
-  background: #0b1727;
+  border-radius: 10px;
+  background: #1a2533;
   color: #54e0d3;
 }
 
-.focus-mode .photo-actions {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  margin-top: 0;
+.focus-mode .photo-toolbar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 10px;
+  background: rgba(8, 18, 30, 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
-.focus-mode .photo-actions button {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: #111b2a;
+.focus-mode .photo-toolbar button {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #1a2533;
+  color: #54e0d3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.focus-mode .photo-toolbar button svg {
+  width: 20px;
+  height: 20px;
 }
 
 .focus-mode .quick-product {
-  min-height: 64px;
+  height: 86px;
+  min-height: 86px;
   grid-template-columns: auto minmax(0, 1fr) minmax(82px, auto);
   gap: 10px;
   border: 1px solid rgba(255, 255, 255, 0.03);
   border-radius: 18px;
   background: linear-gradient(135deg, #111b2a, #0d1827);
   padding: 7px 10px;
+  flex-shrink: 0;
 }
 
 .focus-mode .quick-product h2 {
@@ -1285,12 +1326,14 @@ label {
 .focus-mode .rest-input {
   position: relative;
   display: grid;
+  height: 86px;
   grid-template-rows: 14px minmax(0, 1fr);
   gap: 3px;
   color: #c6ced8;
   font-size: 13px;
   font-weight: 900;
   letter-spacing: 1px;
+  flex-shrink: 0;
 }
 
 .focus-mode .rest-input input {
@@ -1311,13 +1354,15 @@ label {
 .focus-mode .number-pad {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(4, 60px);
-  gap: 4px;
+  grid-template-rows: repeat(4, minmax(52px, 1fr));
+  gap: 8px;
+  flex-shrink: 1;
+  min-height: 0;
 }
 
 .focus-mode .number-pad button {
-  height: 60px;
-  min-height: 60px;
+  height: 100%;
+  min-height: 52px;
   border: 1px solid rgba(255, 255, 255, 0.04);
   border-radius: 16px;
   background: linear-gradient(180deg, #172235, #121d2e);
@@ -1335,7 +1380,7 @@ label {
 
 .focus-mode .quick-actions .secondary-action,
 .focus-mode .quick-actions .primary-action {
-  height: 64px;
+  height: 100%;
   min-height: 64px;
   border-radius: 16px;
   font-weight: 900;
@@ -1344,10 +1389,12 @@ label {
 
 .focus-mode .quick-actions {
   display: grid;
+  height: 72px;
   grid-template-columns: 64px 64px minmax(0, 1fr);
-  gap: 8px;
+  gap: 10px;
   margin-top: 0;
   padding-bottom: 0;
+  flex-shrink: 0;
 }
 
 .focus-mode .quick-actions .secondary-action {
@@ -1365,8 +1412,10 @@ label {
 }
 
 .focus-mode .quick-top {
-  min-height: 56px;
+  height: 72px;
+  min-height: 72px;
   color: #f4f7fa;
+  flex-shrink: 0;
 }
 
 .focus-mode .quick-top .icon-button {
@@ -1420,12 +1469,15 @@ label {
 
 .quick-mini-info {
   display: grid;
+  height: 56px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .quick-mini-info div {
   display: flex;
+  height: 100%;
   min-width: 0;
   align-items: center;
   justify-content: space-between;
@@ -1451,35 +1503,18 @@ label {
   white-space: nowrap;
 }
 
-@media (min-height: 880px) {
+@media (max-height: 720px) {
   .focus-mode .quick-fill {
-    grid-template-rows: 64px minmax(280px, 1fr) 72px 84px 52px 270px 64px;
-    gap: 6px;
+    grid-template-rows: 56px minmax(100px, 1fr) 72px 72px 48px 1fr 64px;
+    gap: 4px;
   }
-
-  .focus-mode .number-pad {
-    grid-template-rows: repeat(4, 60px);
-    gap: 10px;
-  }
-
-  .quick-mini-info div {
-    padding: 8px 10px;
-  }
-}
-
-@media (min-height: 980px) {
-  .focus-mode .quick-fill {
-    grid-template-rows: 72px minmax(300px, 1fr) 76px 92px 58px 286px 70px;
-  }
-
-  .focus-mode .number-pad {
-    grid-template-rows: repeat(4, 64px);
-  }
-
-  .focus-mode .number-pad button {
-    height: 64px;
-    min-height: 64px;
-  }
+  .focus-mode .quick-top { height: 56px; min-height: 56px; }
+  .focus-mode .quick-product { height: 72px; min-height: 72px; }
+  .focus-mode .rest-input { height: 72px; }
+  .quick-mini-info { height: 48px; }
+  .focus-mode .quick-actions { height: 64px; }
+  .focus-mode .number-pad { gap: 4px; }
+  .focus-mode .number-pad button { min-height: 48px; font-size: 28px; }
 }
 
 .receipt-summary {
