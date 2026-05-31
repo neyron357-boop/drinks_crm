@@ -48,6 +48,7 @@ import { createExcelReportFile } from "./lib/excel";
 import { importExcelReport } from "./lib/excel-import";
 import { formatDecimal, parseDecimal, parseOptionalDecimal } from "./lib/numbers";
 import { productSortNumber } from "./lib/product-order";
+import { parseReceiptOcrText, receiptProductConfidence } from "./lib/receipt-ocr";
 import { createEmptyReport, createInitialState, emptyCash, reportId } from "./lib/seed";
 import { loadState, saveState } from "./lib/storage";
 import type {
@@ -76,8 +77,11 @@ type PhotoTransform = { scale: number; x: number; y: number };
 type ReceiptCandidate = {
   id: string;
   rawText: string;
+  productText: string;
   productId: string;
   quantity: string;
+  confidence: number;
+  confirmed: boolean;
 };
 
 const categoryDefs: Array<{
@@ -312,11 +316,15 @@ export default function Home() {
   const [reportClipboardState, setReportClipboardState] = useState<ClipboardImageState>("idle");
   const [reportClipboardBlob, setReportClipboardBlob] = useState<Blob | null>(null);
   const [reportPhotoTransform, setReportPhotoTransform] = useState<PhotoTransform>({ scale: 1, x: 0, y: 0 });
+  const [speechEnabled, setSpeechEnabled] = useState(true);
+  const [isOverrideConfirmed, setIsOverrideConfirmed] = useState(false);
   const [receiptPhotoUrl, setReceiptPhotoUrl] = useState("");
   const [receiptClipboardState, setReceiptClipboardState] = useState<ClipboardImageState>("idle");
   const [receiptClipboardBlob, setReceiptClipboardBlob] = useState<Blob | null>(null);
   const [receiptOcrBusy, setReceiptOcrBusy] = useState(false);
   const [receiptCandidates, setReceiptCandidates] = useState<ReceiptCandidate[]>([]);
+  const [receiptIgnoredLines, setReceiptIgnoredLines] = useState<string[]>([]);
+  const [receiptIgnoredOpen, setReceiptIgnoredOpen] = useState(false);
   const [transferForm, setTransferForm] = useState({
     fromPointId: "jvc",
     toPointId: "business-bay",
@@ -332,6 +340,10 @@ export default function Home() {
   const importInputRef = useRef<HTMLInputElement>(null);
   const reportPhotoInputRef = useRef<HTMLInputElement>(null);
   const receiptPhotoInputRef = useRef<HTMLInputElement>(null);
+  const reportPhotoImageRef = useRef<HTMLImageElement>(null);
+  const reportPhotoContainerRef = useRef<HTMLDivElement>(null);
+  const reportPhotoTransformRef = useRef<PhotoTransform>({ scale: 1, x: 0, y: 0 });
+  const animationFrameIdRef = useRef<number | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const reportPhotoPointersRef = useRef(new Map<number, { x: number; y: number }>());
   const reportPhotoGestureRef = useRef<{
@@ -358,6 +370,7 @@ export default function Home() {
       productId: loaded.products.find((product) => product.active && (!product.pointIds || product.pointIds.includes(firstPoint)))?.id ?? current.productId
     }));
     setUiSoundEnabled(window.localStorage.getItem("drink-ledger-ui-sound") !== "off");
+    setSpeechEnabled(window.localStorage.getItem("drinks_crm_speech_enabled") !== "false");
     setHydrated(true);
   }, []);
 
@@ -631,6 +644,28 @@ export default function Home() {
   }, [hydrated, uiSoundEnabled]);
 
   useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem("drinks_crm_speech_enabled", speechEnabled ? "true" : "false");
+  }, [hydrated, speechEnabled]);
+
+  useEffect(() => {
+    reportPhotoTransformRef.current = reportPhotoTransform;
+    if (reportPhotoImageRef.current) {
+      reportPhotoImageRef.current.style.transform = `translate3d(${reportPhotoTransform.x}px, ${reportPhotoTransform.y}px, 0) scale(${reportPhotoTransform.scale})`;
+    }
+  }, [reportPhotoTransform]);
+
+  useEffect(() => {
+    return () => {
+      if (animationFrameIdRef.current) window.cancelAnimationFrame(animationFrameIdRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    setIsOverrideConfirmed(false);
+  }, [quickIndex]);
+
+  useEffect(() => {
     const activeIds = new Set(inventoryLines.map((line) => line.product.id));
     setBulkSelectedIds((current) => current.filter((id) => activeIds.has(id)));
   }, [inventoryLines]);
@@ -808,13 +843,15 @@ export default function Home() {
 
   function loadReportPhoto(file: File | Blob) {
     setImageUrl(file, setReportPhotoUrl, reportPhotoUrl);
-    setReportPhotoTransform({ scale: 1, x: 0, y: 0 });
+    commitReportPhotoTransform({ scale: 1, x: 0, y: 0 });
     setNotice("Фото отчета добавлено.");
   }
 
   function loadReceiptPhoto(file: File | Blob) {
     setImageUrl(file, setReceiptPhotoUrl, receiptPhotoUrl);
     setReceiptCandidates([]);
+    setReceiptIgnoredLines([]);
+    setReceiptIgnoredOpen(false);
     setNotice("Фото чека добавлено. Запустите OCR и проверьте строки.");
   }
 
@@ -853,110 +890,121 @@ export default function Home() {
     };
   }
 
+  function applyReportPhotoTransform(transform: PhotoTransform) {
+    const next = clampPhotoTransform(transform);
+    reportPhotoTransformRef.current = next;
+    if (typeof window === "undefined" || animationFrameIdRef.current) return;
+    animationFrameIdRef.current = window.requestAnimationFrame(() => {
+      animationFrameIdRef.current = null;
+      if (!reportPhotoImageRef.current) return;
+      const frameTransform = reportPhotoTransformRef.current;
+      reportPhotoImageRef.current.style.transform = `translate3d(${frameTransform.x}px, ${frameTransform.y}px, 0) scale(${frameTransform.scale})`;
+    });
+  }
+
+  function commitReportPhotoTransform(transform: PhotoTransform) {
+    const next = clampPhotoTransform(transform);
+    reportPhotoTransformRef.current = next;
+    setReportPhotoTransform(next);
+  }
+
   function handleReportPhotoPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
     if (!reportPhotoUrl) return;
+    event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
     reportPhotoPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const points = Array.from(reportPhotoPointersRef.current.values());
+    const currentTransform = reportPhotoTransformRef.current;
     if (points.length === 1) {
       reportPhotoGestureRef.current = {
         startDistance: 0,
-        startScale: reportPhotoTransform.scale,
+        startScale: currentTransform.scale,
         startX: points[0].x,
         startY: points[0].y,
-        originX: reportPhotoTransform.x,
-        originY: reportPhotoTransform.y
+        originX: currentTransform.x,
+        originY: currentTransform.y
       };
     }
     if (points.length === 2) {
       const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
       reportPhotoGestureRef.current = {
         startDistance: distance,
-        startScale: reportPhotoTransform.scale,
+        startScale: currentTransform.scale,
         startX: 0,
         startY: 0,
-        originX: reportPhotoTransform.x,
-        originY: reportPhotoTransform.y
+        originX: currentTransform.x,
+        originY: currentTransform.y
       };
     }
   }
 
   function handleReportPhotoPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
     if (!reportPhotoPointersRef.current.has(event.pointerId) || !reportPhotoGestureRef.current) return;
     reportPhotoPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     const points = Array.from(reportPhotoPointersRef.current.values());
     const gesture = reportPhotoGestureRef.current;
     if (points.length === 1) {
-      setReportPhotoTransform((current) =>
-        clampPhotoTransform({
-          ...current,
-          x: gesture.originX + points[0].x - gesture.startX,
-          y: gesture.originY + points[0].y - gesture.startY
-        })
-      );
+      applyReportPhotoTransform({
+        ...reportPhotoTransformRef.current,
+        x: gesture.originX + points[0].x - gesture.startX,
+        y: gesture.originY + points[0].y - gesture.startY
+      });
     }
     if (points.length >= 2 && gesture.startDistance > 0) {
       const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
-      setReportPhotoTransform((current) =>
-        clampPhotoTransform({
-          ...current,
-          scale: gesture.startScale * (distance / gesture.startDistance)
-        })
-      );
+      applyReportPhotoTransform({
+        ...reportPhotoTransformRef.current,
+        scale: gesture.startScale * (distance / gesture.startDistance)
+      });
     }
   }
 
   function handleReportPhotoPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     reportPhotoPointersRef.current.delete(event.pointerId);
-    if (reportPhotoPointersRef.current.size === 0) reportPhotoGestureRef.current = null;
+    if (reportPhotoPointersRef.current.size === 0) {
+      reportPhotoGestureRef.current = null;
+      setReportPhotoTransform(reportPhotoTransformRef.current);
+    }
   }
 
   function toggleReportPhotoZoom() {
-    setReportPhotoTransform((current) => (current.scale > 1 ? { scale: 1, x: 0, y: 0 } : { scale: 2.4, x: 0, y: 0 }));
+    const current = reportPhotoTransformRef.current;
+    commitReportPhotoTransform(current.scale > 1 ? { scale: 1, x: 0, y: 0 } : { scale: 2.4, x: 0, y: 0 });
   }
 
   function resetReportPhotoPosition() {
-    setReportPhotoTransform({ scale: 1, x: 0, y: 0 });
+    commitReportPhotoTransform({ scale: 1, x: 0, y: 0 });
   }
 
-  function normalizeReceiptText(value: string) {
-    return value.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, " ");
-  }
-
-  function matchReceiptProduct(rawText: string) {
-    const rawTokens = normalizeReceiptText(rawText).split(/\s+/).filter((token) => token.length > 1);
-    let best: { product: Product; score: number } | null = null;
+  function matchReceiptProduct(productText: string) {
+    let best: { product: Product; confidence: number } | null = null;
     for (const product of state.products.filter((item) => item.active)) {
-      const productTokens = normalizeReceiptText(product.name).split(/\s+/).filter((token) => token.length > 1);
-      const score = productTokens.reduce((total, token) => total + (rawTokens.some((raw) => raw.includes(token) || token.includes(raw)) ? 1 : 0), 0);
-      if (!best || score > best.score) best = { product, score };
+      const confidence = receiptProductConfidence(productText, product.name);
+      if (!best || confidence > best.confidence) best = { product, confidence };
     }
-    return best && best.score >= 2 ? best.product : null;
-  }
-
-  function extractReceiptQuantity(rawText: string) {
-    const qtyMatch = rawText.match(/(?:qty|qnty|quantity|кол-?во|x)\s*[:x]?\s*(\d+(?:[.,]\d+)?)/i);
-    if (qtyMatch) return qtyMatch[1].replace(",", ".");
-    const numbers = rawText.match(/\d+(?:[.,]\d+)?/g) ?? [];
-    const plausible = numbers.map((value) => parseNumber(value)).filter((value) => value > 0 && value <= 500);
-    return plausible.length ? String(plausible[0]) : "1";
+    return best && best.confidence >= 60 ? best : null;
   }
 
   function buildReceiptCandidates(text: string): ReceiptCandidate[] {
-    return text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line.length >= 4 && /[a-zа-я]/i.test(line))
-      .slice(0, 40)
-      .map((line) => {
-        const product = matchReceiptProduct(line);
-        return {
-          id: makeId(),
-          rawText: line,
-          productId: product?.id ?? "",
-          quantity: extractReceiptQuantity(line)
-        };
-      });
+    const parsed = parseReceiptOcrText(text);
+    setReceiptIgnoredLines(parsed.ignoredLines);
+    setReceiptIgnoredOpen(false);
+
+    return parsed.items.map((line) => {
+      const match = matchReceiptProduct(line.productText);
+      const confidence = match?.confidence ?? 0;
+      return {
+        id: makeId(),
+        rawText: line.rawText,
+        productText: line.productText,
+        productId: confidence >= 60 ? match?.product.id ?? "" : "",
+        quantity: String(line.quantity),
+        confidence,
+        confirmed: confidence >= 85
+      };
+    });
   }
 
   async function runReceiptOcr() {
@@ -977,12 +1025,32 @@ export default function Home() {
   }
 
   function updateReceiptCandidate(id: string, patch: Partial<ReceiptCandidate>) {
-    setReceiptCandidates((current) => current.map((candidate) => (candidate.id === id ? { ...candidate, ...patch } : candidate)));
+    setReceiptCandidates((current) =>
+      current.map((candidate) => {
+        if (candidate.id !== id) return candidate;
+        const next = { ...candidate, ...patch };
+        if ("productId" in patch) {
+          next.confirmed = patch.productId === "__skip__" || Boolean(patch.productId && patch.productId !== candidate.productId);
+          if (!patch.productId) next.confirmed = false;
+        }
+        return next;
+      })
+    );
+  }
+
+  function confirmReceiptCandidate(id: string) {
+    updateReceiptCandidate(id, { confirmed: true });
+  }
+
+  function receiptCandidateHasProblem(candidate: ReceiptCandidate) {
+    if (candidate.productId === "__skip__") return false;
+    const quantity = parseNumber(candidate.quantity);
+    return !candidate.productId || !quantity || quantity <= 0 || (candidate.confidence < 85 && !candidate.confirmed);
   }
 
   function applyReceiptCandidates() {
     const activeCandidates = receiptCandidates.filter((candidate) => candidate.productId !== "__skip__");
-    if (!canEditReport || activeCandidates.length === 0) return;
+    if (!canEditReport || activeCandidates.length === 0 || receiptCandidates.some(receiptCandidateHasProblem)) return;
 
     setState((current) => {
       const existing = getReport(current, selectedDate, selectedPointId) ?? createEmptyReport(selectedDate, selectedPointId, selectedDriverId, current.products);
@@ -997,10 +1065,10 @@ export default function Home() {
         let productId = candidate.productId;
         let product = nextProducts.find((item) => item.id === productId);
         if (productId === "__new__" || !product) {
-          productId = nextUniqueId(nextProducts, slugify(candidate.rawText));
+          productId = nextUniqueId(nextProducts, slugify(candidate.productText));
           product = {
             id: productId,
-            name: candidate.rawText,
+            name: candidate.productText,
             price: 0,
             norm: 0,
             category: "Напитки",
@@ -1400,6 +1468,7 @@ export default function Home() {
     quickDraftRef.current = normalized;
     if (input && input.value !== normalized) input.value = normalized;
     setQuickPreviewRest(parsed);
+    setIsOverrideConfirmed(false);
     scheduleQuickCommit(quickLine.product.id, parsed);
   }
 
@@ -1411,6 +1480,7 @@ export default function Home() {
     quickDraftRef.current = formatted;
     if (quickInputRef.current) quickInputRef.current.value = formatted;
     setQuickPreviewRest(next);
+    setIsOverrideConfirmed(false);
     scheduleQuickCommit(quickLine.product.id, next);
   }
 
@@ -1440,11 +1510,44 @@ export default function Home() {
     quickDraftRef.current = normalized;
     if (quickInputRef.current) quickInputRef.current.value = normalized;
     setQuickPreviewRest(parsed);
+    setIsOverrideConfirmed(false);
     scheduleQuickCommit(quickLine.product.id, parsed);
+  }
+
+  function speakDigit(key: string) {
+    if (!speechEnabled) return;
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+
+    window.speechSynthesis.cancel();
+
+    const map: Record<string, string> = {
+      "0": "ноль",
+      "1": "один",
+      "2": "два",
+      "3": "три",
+      "4": "четыре",
+      "5": "пять",
+      "6": "шесть",
+      "7": "семь",
+      "8": "восемь",
+      "9": "девять",
+      ".": "точка",
+      "backspace": "удалено"
+    };
+
+    const text = map[key] || key;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "ru-RU";
+    utterance.rate = 1.2;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
+
+    window.speechSynthesis.speak(utterance);
   }
 
   function pressQuickKey(key: string) {
     if (!quickLine || !canEditReport) return;
+    speakDigit(key);
     if (key === "backspace") {
       setQuickDraftValue(quickDraftRef.current.slice(0, -1));
       return;
@@ -1489,6 +1592,11 @@ export default function Home() {
 
   function goNext() {
     flushQuickCommit();
+    if (quickLine && typeof quickPreviewRest === "number" && quickPreviewRest > quickLine.available && !isOverrideConfirmed) {
+      setIsOverrideConfirmed(true);
+      setNotice("Остаток больше доступного. Нажмите Далее еще раз для подтверждения.");
+      return;
+    }
     if (quickIndex < quickLines.length - 1) {
       setQuickIndex((current) => current + 1);
       return;
@@ -1582,6 +1690,11 @@ export default function Home() {
     quickLine && typeof quickPreviewRest === "number" ? parseNumber(String(quickLine.available - quickPreviewRest)) : undefined;
   const quickPreviewAmount =
     quickLine && typeof quickPreviewSale === "number" ? parseNumber(String(quickPreviewSale * quickLine.product.price)) : undefined;
+  const quickSuspicious = Boolean(quickLine && typeof quickPreviewRest === "number" && quickPreviewRest > quickLine.available);
+  const canApplyReceiptCandidates =
+    canEditReport &&
+    receiptCandidates.some((candidate) => candidate.productId !== "__skip__") &&
+    receiptCandidates.every((candidate) => !receiptCandidateHasProblem(candidate));
   const isFocusMode = activeTab === "inventory" && inventoryView === "quick";
 
   return (
@@ -1750,6 +1863,7 @@ export default function Home() {
 
               <div className="report-photo-panel">
                 <div
+                  ref={reportPhotoContainerRef}
                   className={reportPhotoUrl ? "photo-viewer has-photo" : "photo-viewer"}
                   onPointerDown={handleReportPhotoPointerDown}
                   onPointerMove={handleReportPhotoPointerMove}
@@ -1759,6 +1873,7 @@ export default function Home() {
                 >
                   {reportPhotoUrl ? (
                     <img
+                      ref={reportPhotoImageRef}
                       src={reportPhotoUrl}
                       alt="Фото отчета"
                       style={{
@@ -1772,6 +1887,15 @@ export default function Home() {
                     </div>
                   )}
                 </div>
+                <button
+                  type="button"
+                  className="photo-speech-toggle"
+                  onClick={() => setSpeechEnabled((current) => !current)}
+                  aria-label={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
+                  title={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
+                >
+                  {speechEnabled ? <Volume2 size={22} /> : <VolumeX size={22} />}
+                </button>
                 <div className="photo-actions">
                   <button type="button" onClick={() => reportPhotoInputRef.current?.click()} aria-label="Галерея" title="Галерея">
                     <ImagePlus size={18} />
@@ -1803,15 +1927,17 @@ export default function Home() {
                   </div>
 
                   <label className="rest-input">
-                    <span>Остаток</span>
+                    <span>ОСТАТОК</span>
                     <div className="rest-stepper solo">
                       <input
                         key={quickLine.product.id}
                         ref={quickInputRef}
-                        inputMode={quickLine && allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
+                        inputMode="none"
                         type="text"
                         readOnly
+                        tabIndex={-1}
                         defaultValue={formatQuantity(quickLine.homeRest, quickLine.product)}
+                        onFocus={(event) => event.currentTarget.blur()}
                         onBlur={flushQuickCommit}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
@@ -1830,8 +1956,30 @@ export default function Home() {
                         disabled={!canEditReport}
                         aria-label="Остаток товара"
                       />
+                      {typeof quickPreviewRest === "number" && (
+                        <span className="rest-check" aria-hidden="true">
+                          <CheckCircle2 size={18} />
+                        </span>
+                      )}
+                      {quickSuspicious && (
+                        <span className="quick-warning">
+                          <AlertTriangle size={14} />
+                          Остаток больше доступного
+                        </span>
+                      )}
                     </div>
                   </label>
+
+                  <div className="quick-mini-info">
+                    <div>
+                      <span>Продано</span>
+                      <strong>{typeof quickPreviewSale === "number" ? num(quickPreviewSale) : "—"}</strong>
+                    </div>
+                    <div>
+                      <span>Сумма</span>
+                      <strong>{typeof quickPreviewAmount === "number" ? currency(quickPreviewAmount) : "—"}</strong>
+                    </div>
+                  </div>
 
                   <div className="number-pad" aria-label="Цифровая клавиатура">
                     {["7", "8", "9", "4", "5", "6", "1", "2", "3", "0", ".", "backspace"].map((key) => (
@@ -1939,6 +2087,7 @@ export default function Home() {
                       title="Следующий"
                     >
                       <ArrowRight size={18} />
+                      <span>Далее</span>
                     </button>
                   </div>
                 </>
@@ -2105,8 +2254,12 @@ export default function Home() {
           {receiptCandidates.length > 0 && (
             <div className="receipt-review">
               {receiptCandidates.map((candidate) => (
-                <div className="receipt-review-row" key={candidate.id}>
-                  <strong>{candidate.rawText}</strong>
+                <div className={receiptCandidateHasProblem(candidate) ? "receipt-review-row needs-review" : "receipt-review-row"} key={candidate.id}>
+                  <div className="receipt-review-text">
+                    <span>Чек:</span>
+                    <strong>{candidate.rawText}</strong>
+                    <small>{candidate.productText}</small>
+                  </div>
                   <label>
                     Товар
                     <select value={candidate.productId} onChange={(event) => updateReceiptCandidate(candidate.id, { productId: event.target.value })}>
@@ -2120,18 +2273,41 @@ export default function Home() {
                       <option value="__skip__">Пропустить</option>
                     </select>
                   </label>
-                  <label>
-                    Количество
-                    <input
-                      inputMode="decimal"
-                      value={candidate.quantity}
-                      onChange={(event) => updateReceiptCandidate(candidate.id, { quantity: event.target.value })}
-                    />
-                  </label>
+                  <div className="receipt-review-grid">
+                    <label>
+                      Количество
+                      <input
+                        inputMode="decimal"
+                        value={candidate.quantity}
+                        onChange={(event) => updateReceiptCandidate(candidate.id, { quantity: event.target.value })}
+                      />
+                    </label>
+                    <div className="receipt-confidence">
+                      <span>Уверенность</span>
+                      <strong>{candidate.confidence}%</strong>
+                    </div>
+                  </div>
+                  {candidate.productId !== "__skip__" && candidate.confidence < 85 && !candidate.confirmed && (
+                    <button type="button" className="secondary-wide" onClick={() => confirmReceiptCandidate(candidate.id)} disabled={!candidate.productId}>
+                      <CheckCircle2 size={17} />
+                      Подтвердить строку
+                    </button>
+                  )}
                 </div>
               ))}
-              <button type="button" className="primary-action" onClick={applyReceiptCandidates} disabled={!canEditReport}>
+              {receiptIgnoredLines.length > 0 && (
+                <details className="receipt-ignored" open={receiptIgnoredOpen} onToggle={(event) => setReceiptIgnoredOpen(event.currentTarget.open)}>
+                  <summary>Игнорировано строк: {receiptIgnoredLines.length}</summary>
+                  <div>
+                    {receiptIgnoredLines.map((line, index) => (
+                      <span key={`${line}-${index}`}>{line}</span>
+                    ))}
+                  </div>
+                </details>
+              )}
+              <button type="button" className="primary-action" onClick={applyReceiptCandidates} disabled={!canApplyReceiptCandidates}>
                 <CheckCircle2 size={18} />
+                Применить приход
               </button>
             </div>
           )}
@@ -2492,6 +2668,15 @@ export default function Home() {
                 title={uiSoundEnabled ? "Выключить звук" : "Включить звук"}
               >
                 {uiSoundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+              </button>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={() => setSpeechEnabled((current) => !current)}
+                aria-label={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
+                title={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
+              >
+                {speechEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
               </button>
             </div>
             <div className={`server-status ${serverCheck.status}`}>

@@ -124,11 +124,17 @@ label {
 }
 
 .app-shell.focus-mode {
-  width: min(100%, 520px);
+  width: min(100%, 390px);
   height: 100dvh;
   min-height: 100dvh;
-  overflow: hidden;
-  padding: 8px 12px calc(16px + env(safe-area-inset-bottom));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(32, 77, 110, 0.18), transparent 35%),
+    linear-gradient(180deg, #071321 0%, #08111d 100%);
+  padding: 4px 10px calc(8px + env(safe-area-inset-bottom));
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
 }
 
 .app-header {
@@ -767,6 +773,10 @@ label {
   border-radius: var(--radius);
   background: #0b0d11;
   touch-action: none;
+  overscroll-behavior: contain;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .photo-viewer img {
@@ -775,9 +785,10 @@ label {
   max-height: none;
   height: auto;
   transform-origin: center;
-  transition: transform 0.08s linear;
   user-select: none;
   -webkit-user-drag: none;
+  pointer-events: none;
+  will-change: transform;
 }
 
 .photo-empty {
@@ -1011,9 +1022,79 @@ label {
   padding-bottom: 8px;
 }
 
+.receipt-review-row.needs-review {
+  border-color: rgba(240, 184, 77, 0.46);
+  background: rgba(240, 184, 77, 0.08);
+  border-radius: var(--radius);
+  padding: 10px;
+}
+
 .receipt-review-row strong {
   color: var(--text);
   font-size: 13px;
+}
+
+.receipt-review-text {
+  display: grid;
+  gap: 4px;
+}
+
+.receipt-review-text span,
+.receipt-confidence span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.receipt-review-text small {
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.receipt-review-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 104px;
+  gap: 8px;
+  align-items: end;
+}
+
+.receipt-confidence {
+  display: grid;
+  min-height: 45px;
+  align-content: center;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 8px;
+}
+
+.receipt-confidence strong {
+  color: var(--teal);
+  font-size: 20px;
+}
+
+.receipt-ignored {
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 8px 10px;
+}
+
+.receipt-ignored summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.receipt-ignored div {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.receipt-ignored span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .focus-mode .photo-viewer {
@@ -1021,68 +1102,158 @@ label {
   height: 100%;
   min-height: 0;
   max-height: none;
+  border-radius: 16px;
+  background: #0d1725;
 }
 
 .focus-mode .quick-fill {
-  height: calc(100dvh - 20px - env(safe-area-inset-bottom));
+  display: grid;
+  height: 100%;
   min-height: 0;
-  grid-template-rows: 36px minmax(195px, 1fr) 40px 52px 132px 44px;
-  gap: 6px;
+  grid-template-rows: 56px minmax(260px, 1fr) 64px 68px 42px 252px 64px;
+  gap: 3px;
+  box-sizing: border-box;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .focus-mode .report-photo-panel {
-  min-height: 0;
-  padding: 5px;
+  position: relative;
+  min-height: 260px;
+  border: 1px solid #1c2940;
+  border-radius: 20px;
+  background: #0d1725;
+  padding: 6px;
+  overflow: hidden;
+}
+
+.focus-mode .photo-viewer img {
+  width: 100%;
+  min-height: 100%;
+  object-fit: cover;
+  border-radius: 16px;
+}
+
+.photo-speech-toggle {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 999px;
+  background: #0b1727;
+  color: #54e0d3;
 }
 
 .focus-mode .photo-actions {
   position: absolute;
-  right: 9px;
-  bottom: 9px;
+  right: 12px;
+  bottom: 12px;
   margin-top: 0;
 }
 
 .focus-mode .photo-actions button {
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #111b2a;
 }
 
 .focus-mode .quick-product {
-  min-height: 0;
+  min-height: 64px;
+  grid-template-columns: auto minmax(0, 1fr) minmax(82px, auto);
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  border-radius: 18px;
+  background: linear-gradient(135deg, #111b2a, #0d1827);
   padding: 7px 10px;
 }
 
 .focus-mode .quick-product h2 {
   min-height: 0;
   margin-top: 0;
-  font-size: 16px;
+  color: #f4f7fa;
+  font-size: 20px;
+  font-weight: 850;
   -webkit-line-clamp: 1;
 }
 
 .focus-mode .quick-row-number {
-  font-size: 30px;
+  color: #54e0d3;
+  font-size: 40px;
+  font-weight: 900;
+}
+
+.focus-mode .quick-previous {
+  display: grid;
+  min-width: 82px;
+  height: 48px;
+  align-content: center;
+  justify-items: center;
+  gap: 1px;
+  border-radius: 14px;
+  background: #0b1422;
+}
+
+.focus-mode .quick-previous span {
+  color: #a9b2bf;
+  font-size: 12px;
+}
+
+.focus-mode .quick-previous strong {
+  color: #f4f7fa;
+  font-size: 24px;
 }
 
 .focus-mode .rest-input {
-  justify-content: start;
-  gap: 2px;
-  font-size: 11px;
+  position: relative;
+  display: grid;
+  grid-template-rows: 14px minmax(0, 1fr);
+  gap: 3px;
+  color: #c6ced8;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 1px;
 }
 
 .focus-mode .rest-input input {
-  height: 40px;
-  font-size: 28px;
+  width: 100%;
+  height: 100%;
+  border: 2px solid #43d7cf;
+  border-radius: 18px;
+  background: rgba(5, 15, 18, 0.88);
+  color: #f4f7fa;
+  caret-color: transparent;
+  pointer-events: none;
+  font-size: 42px;
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
 }
 
 .focus-mode .number-pad {
-  align-content: stretch;
-  grid-template-rows: repeat(4, minmax(0, 1fr));
-  gap: 5px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(4, 60px);
+  gap: 4px;
 }
 
 .focus-mode .number-pad button {
-  min-height: 0;
-  height: auto;
+  height: 60px;
+  min-height: 60px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #172235, #121d2e);
+  color: #f4f7fa;
+  font-size: 34px;
+  font-weight: 950;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .focus-mode .quick-extra {
@@ -1091,26 +1262,151 @@ label {
 
 .focus-mode .quick-actions .secondary-action,
 .focus-mode .quick-actions .primary-action {
-  min-height: 44px;
+  height: 64px;
+  min-height: 64px;
+  border-radius: 16px;
+  font-weight: 900;
+  font-size: 22px;
 }
 
 .focus-mode .quick-actions {
-  grid-template-columns: 54px 54px minmax(0, 1fr);
+  display: grid;
+  grid-template-columns: 64px 64px minmax(0, 1fr);
+  gap: 8px;
   margin-top: 0;
+  padding-bottom: 0;
+}
+
+.focus-mode .quick-actions .secondary-action {
+  background: #111b2a;
+  color: #f4f7fa;
+}
+
+.focus-mode .quick-actions .primary-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(180deg, #58e4d5, #53ddd0);
+  color: #071321;
 }
 
 .focus-mode .quick-top {
-  min-height: 36px;
+  min-height: 56px;
+  color: #f4f7fa;
 }
 
 .focus-mode .quick-top .icon-button {
-  width: 38px;
-  min-height: 36px;
+  width: 52px;
+  min-height: 52px;
+  border-radius: 16px;
+  background: #111b2a;
+  color: #f4f7fa;
 }
 
 .focus-mode .quick-counter {
   margin-left: auto;
-  font-size: 22px;
+  color: #f4f7fa;
+  font-size: 34px;
+  font-weight: 900;
+}
+
+.rest-stepper.solo {
+  position: relative;
+}
+
+.rest-check {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 2px solid #54e0d3;
+  border-radius: 999px;
+  color: #54e0d3;
+  pointer-events: none;
+}
+
+.quick-warning {
+  position: absolute;
+  right: 10px;
+  bottom: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #f0b84d;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: none;
+  pointer-events: none;
+}
+
+.quick-mini-info {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.quick-mini-info div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  border-radius: 14px;
+  background: #111b2a;
+  padding: 6px 9px;
+}
+
+.quick-mini-info span {
+  color: #c6ced8;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.quick-mini-info strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #54e0d3;
+  font-size: 17px;
+  font-weight: 950;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-height: 880px) {
+  .focus-mode .quick-fill {
+    grid-template-rows: 64px minmax(280px, 1fr) 72px 84px 52px 270px 64px;
+    gap: 6px;
+  }
+
+  .focus-mode .number-pad {
+    grid-template-rows: repeat(4, 60px);
+    gap: 10px;
+  }
+
+  .quick-mini-info div {
+    padding: 8px 10px;
+  }
+}
+
+@media (min-height: 980px) {
+  .focus-mode .quick-fill {
+    grid-template-rows: 72px minmax(300px, 1fr) 76px 92px 58px 286px 70px;
+  }
+
+  .focus-mode .number-pad {
+    grid-template-rows: repeat(4, 64px);
+  }
+
+  .focus-mode .number-pad button {
+    height: 64px;
+    min-height: 64px;
+  }
 }
 
 .receipt-summary {
@@ -2047,8 +2343,8 @@ label {
   }
 
   .app-shell.focus-mode {
-    width: min(680px, 100%);
-    padding: 24px 28px 36px;
+    width: min(390px, 100%);
+    padding: 4px 10px calc(8px + env(safe-area-inset-bottom));
   }
 
   .app-header {
