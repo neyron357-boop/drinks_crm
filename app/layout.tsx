@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { IosCalloutGuard } from "./IosCalloutGuard";
 
 export const metadata: Metadata = {
   title: "Учет продаж напитков",
@@ -20,7 +21,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ru">
-      <body>{children}</body>
+      <body className="no-ios-callout">
+        <IosCalloutGuard />
+        {children}
+      </body>
     </html>
   );
 }
