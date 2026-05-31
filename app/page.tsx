@@ -1701,7 +1701,7 @@ export default function Home() {
     <main className={isFocusMode ? "app-shell focus-mode" : "app-shell"}>
       {!isFocusMode && (
         <header className="app-header">
-          <label className="point-select">
+          <label className="point-select no-ios-callout tap-target">
             <select value={selectedPointId} onChange={(event) => selectPoint(event.target.value)} aria-label="Точка">
               {state.points.filter((point) => point.active).map((point) => (
                 <option key={point.id} value={point.id}>
@@ -1740,7 +1740,7 @@ export default function Home() {
 
       {activeTab === "home" && (
         <section className="screen home-screen">
-          <button type="button" className="hero-progress" onClick={() => setProgressOpen(true)}>
+          <button type="button" className="hero-progress no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => setProgressOpen(true)}>
             <div>
               <span className="overline">{shortDate(selectedDate)}</span>
               <strong>
@@ -1758,7 +1758,7 @@ export default function Home() {
 
           <button
             type="button"
-            className="primary-cta icon-cta"
+            className="primary-cta no-ios-callout tap-target icon-cta"
             onClick={continueFill}
             aria-label={missingCount === 0 ? "Открыть закрытие дня" : "Продолжить заполнение"}
             title={missingCount === 0 ? "Открыть закрытие дня" : "Продолжить"}
@@ -1782,7 +1782,7 @@ export default function Home() {
                 />
               </label>
 
-              <details className="bulk-panel">
+              <details className="bulk-panel no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}>
                 <summary>
                   <span>Массово</span>
                   <strong>{bulkSelectedIds.length}</strong>
@@ -1798,7 +1798,7 @@ export default function Home() {
                   />
                   <button
                     type="button"
-                    className="secondary-action"
+                    className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
                     onClick={selectVisibleBulkProducts}
                     disabled={!canEditReport}
                     aria-label="Выбрать видимые"
@@ -1806,12 +1806,12 @@ export default function Home() {
                   >
                     <CheckCircle2 size={18} />
                   </button>
-                  <button type="button" className="secondary-action" onClick={() => setBulkSelectedIds([])} aria-label="Очистить" title="Очистить">
+                  <button type="button" className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => setBulkSelectedIds([])} aria-label="Очистить" title="Очистить">
                     <X size={18} />
                   </button>
                   <button
                     type="button"
-                    className="primary-action"
+                    className="primary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
                     onClick={applyBulkRest}
                     disabled={!canEditReport || bulkSelectedIds.length === 0}
                     aria-label="Применить"
@@ -1824,11 +1824,11 @@ export default function Home() {
 
               <div className="inventory-list">
                 {visibleInventoryLines.map((line) => (
-                  <div className={`inventory-list-row ${lineTone(line)}`} key={line.product.id}>
+                  <div className={`inventory-list-row ${lineTone(line)} no-ios-callout tap-target`} onContextMenu={(e) => e.preventDefault()} key={line.product.id}>
                     <div className="inventory-product-cell">
                       <button
                         type="button"
-                        className={bulkSelectedIds.includes(line.product.id) ? "select-box active" : "select-box"}
+                        className={bulkSelectedIds.includes(line.product.id) ? "select-box active no-ios-callout tap-target" : "select-box no-ios-callout tap-target"}
                         onClick={() => toggleBulkProduct(line.product.id)}
                         aria-label="Выбрать товар"
                       />
@@ -1851,7 +1851,7 @@ export default function Home() {
           {inventoryView === "quick" && (
             <div className="quick-fill">
               <div className="quick-top">
-                <button type="button" className="icon-button" onClick={() => setInventoryView("list")} aria-label="Вернуться к списку">
+                <button type="button" className="icon-button no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => setInventoryView("list")} aria-label="Вернуться к списку">
                   <ArrowLeft size={18} />
                 </button>
                 <span className="quick-counter">
@@ -1861,7 +1861,7 @@ export default function Home() {
 
               <input ref={reportPhotoInputRef} className="hidden-file-input" type="file" accept="image/*" onChange={handleReportPhotoFile} />
 
-              <div className="report-photo-panel">
+              <div className="report-photo-panel no-ios-callout">
                 <div
                   ref={reportPhotoContainerRef}
                   className={reportPhotoUrl ? "photo-viewer has-photo" : "photo-viewer"}
@@ -1917,21 +1917,21 @@ export default function Home() {
 
               {quickLine && (
                 <>
-                  <div className={`quick-product ${quickTone}`}>
+                  <div className={`quick-product ${quickTone} no-ios-callout tap-target`} onContextMenu={(e) => e.preventDefault()}>
                     <strong className="quick-row-number">{quickLine.rowNumber}</strong>
                     <h2>{quickLine.product.name}</h2>
-                    <div className="quick-previous">
+                    <div className="quick-previous no-ios-callout">
                       <span>Было:</span>
                       <strong>{num(quickLine.previousRest)}</strong>
                     </div>
                   </div>
 
-                  <label className="rest-input">
+                  <label className="rest-input no-ios-callout">
                     <span>ОСТАТОК</span>
                     <div className="rest-stepper solo">
                       <input
                         key={quickLine.product.id}
-                        ref={quickInputRef}
+                        ref={quickInputRef} className="stock-input"
                         inputMode="none"
                         type="text"
                         readOnly
@@ -1970,7 +1970,7 @@ export default function Home() {
                     </div>
                   </label>
 
-                  <div className="quick-mini-info">
+                  <div className="quick-mini-info no-ios-callout">
                     <div>
                       <span>Продано</span>
                       <strong>{typeof quickPreviewSale === "number" ? num(quickPreviewSale) : "—"}</strong>
@@ -1981,7 +1981,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <div className="number-pad" aria-label="Цифровая клавиатура">
+                  <div className="number-pad no-ios-callout" aria-label="Цифровая клавиатура">
                     {["7", "8", "9", "4", "5", "6", "1", "2", "3", "0", ".", "backspace"].map((key) => (
                       <button
                         type="button"
@@ -1996,12 +1996,12 @@ export default function Home() {
                     ))}
                   </div>
 
-                  <details className="quick-extra">
+                  <details className="quick-extra no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}>
                     <summary>
                       Подробнее
                       <ChevronDown size={16} />
                     </summary>
-                    <div className="auto-calc">
+                    <div className="auto-calc no-ios-callout">
                       <div>
                         <span>Продано</span>
                         <strong>{typeof quickPreviewSale === "number" ? num(quickPreviewSale) : "—"}</strong>
@@ -2012,10 +2012,10 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <div className={quickItem?.flagged ? "discrepancy-card active" : "discrepancy-card"}>
+                    <div className={quickItem?.flagged ? "discrepancy-card active no-ios-callout" : "discrepancy-card no-ios-callout"}>
                       <button
                         type="button"
-                        className="secondary-wide"
+                        className="secondary-wide no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
                         onPointerDown={(event) => event.preventDefault()}
                         onClick={() => updateDiscrepancy(quickLine.product.id, { flagged: !quickItem?.flagged })}
                         disabled={!canEditReport}
@@ -2064,12 +2064,12 @@ export default function Home() {
                   </details>
 
                   <div className="quick-actions">
-                    <button type="button" className="secondary-action" onClick={goPrev} disabled={quickIndex === 0}>
+                    <button type="button" className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={goPrev} disabled={quickIndex === 0}>
                       <ArrowLeft size={18} />
                     </button>
                     <button
                       type="button"
-                      className="secondary-action"
+                      className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={keepPreviousAndNext}
                       disabled={!canEditReport}
@@ -2080,7 +2080,7 @@ export default function Home() {
                     </button>
                     <button
                       type="button"
-                      className="primary-action"
+                      className="primary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={goNext}
                       aria-label="Следующий товар"
@@ -2099,7 +2099,7 @@ export default function Home() {
 
       {activeTab === "transfers" && (
         <section className="screen transfer-screen">
-          <div className="transfer-card">
+          <div className="transfer-card no-ios-callout">
             <label className="search-field compact">
               <Search size={17} />
               <input
@@ -2190,7 +2190,7 @@ export default function Home() {
               </label>
             </div>
 
-            <button type="button" className="primary-cta icon-cta" onClick={addTransfer} disabled={!canEditReport} aria-label="Переместить" title="Переместить">
+            <button type="button" className="primary-cta no-ios-callout tap-target icon-cta" onClick={addTransfer} disabled={!canEditReport} aria-label="Переместить" title="Переместить">
               <Truck size={20} />
             </button>
           </div>
@@ -2201,7 +2201,7 @@ export default function Home() {
               const to = state.points.find((point) => point.id === transfer.toPointId)?.name ?? transfer.toPointId;
               const product = state.products.find((item) => item.id === transfer.productId)?.name ?? transfer.productId;
               return (
-                <div className="movement-row" key={transfer.id}>
+                <div className="movement-row no-ios-callout" key={transfer.id}>
                   <div>
                     <strong>{product}</strong>
                     <span>
@@ -2221,7 +2221,7 @@ export default function Home() {
       {activeTab === "receipts" && (
         <section className="screen receipts-screen">
           <input ref={receiptPhotoInputRef} className="hidden-file-input" type="file" accept="image/*" onChange={handleReceiptPhotoFile} />
-          <div className="receipt-import-panel">
+          <div className="receipt-import-panel no-ios-callout">
             <div className={receiptPhotoUrl ? "receipt-photo-preview has-photo" : "receipt-photo-preview"}>
               {receiptPhotoUrl ? (
                 <img src={receiptPhotoUrl} alt="Фото чека" />
@@ -2254,7 +2254,7 @@ export default function Home() {
           {receiptCandidates.length > 0 && (
             <div className="receipt-review">
               {receiptCandidates.map((candidate) => (
-                <div className={receiptCandidateHasProblem(candidate) ? "receipt-review-row needs-review" : "receipt-review-row"} key={candidate.id}>
+                <div className={receiptCandidateHasProblem(candidate) ? "receipt-review-row needs-review no-ios-callout" : "receipt-review-row no-ios-callout"} key={candidate.id}>
                   <div className="receipt-review-text">
                     <span>Чек:</span>
                     <strong>{candidate.rawText}</strong>
@@ -2288,7 +2288,7 @@ export default function Home() {
                     </div>
                   </div>
                   {candidate.productId !== "__skip__" && candidate.confidence < 85 && !candidate.confirmed && (
-                    <button type="button" className="secondary-wide" onClick={() => confirmReceiptCandidate(candidate.id)} disabled={!candidate.productId}>
+                    <button type="button" className="secondary-wide no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => confirmReceiptCandidate(candidate.id)} disabled={!candidate.productId}>
                       <CheckCircle2 size={17} />
                       Подтвердить строку
                     </button>
@@ -2296,7 +2296,7 @@ export default function Home() {
                 </div>
               ))}
               {receiptIgnoredLines.length > 0 && (
-                <details className="receipt-ignored" open={receiptIgnoredOpen} onToggle={(event) => setReceiptIgnoredOpen(event.currentTarget.open)}>
+                <details className="receipt-ignored no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} open={receiptIgnoredOpen} onToggle={(event) => setReceiptIgnoredOpen(event.currentTarget.open)}>
                   <summary>Игнорировано строк: {receiptIgnoredLines.length}</summary>
                   <div>
                     {receiptIgnoredLines.map((line, index) => (
@@ -2305,7 +2305,7 @@ export default function Home() {
                   </div>
                 </details>
               )}
-              <button type="button" className="primary-action" onClick={applyReceiptCandidates} disabled={!canApplyReceiptCandidates}>
+              <button type="button" className="primary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={applyReceiptCandidates} disabled={!canApplyReceiptCandidates}>
                 <CheckCircle2 size={18} />
                 Применить приход
               </button>
@@ -2324,7 +2324,7 @@ export default function Home() {
 
           <div className="receipt-list">
             {receiptLines.map((line) => (
-              <div className="receipt-row" key={line.product.id}>
+              <div className="receipt-row no-ios-callout" key={line.product.id}>
                 <div>
                   <strong>{line.rowNumber}. {line.product.name}</strong>
                   <span>{num(line.previousRest)}</span>
@@ -2368,7 +2368,7 @@ export default function Home() {
             <Metric label="Разница" value={currency(financeRevenueGap)} tone={Math.abs(financeRevenueGap) > 0.01 ? "bad" : "good"} />
           </div>
 
-          <details className="finance-more">
+          <details className="finance-more no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}>
             <summary>
               Подробнее
               <ChevronDown size={16} />
@@ -2392,7 +2392,7 @@ export default function Home() {
                 <button
                   type="button"
                   key={columnKey}
-                  className={selectedCashColumn === columnKey ? "active" : ""}
+                  className={selectedCashColumn === columnKey ? "active no-ios-callout tap-target" : "no-ios-callout tap-target"} onContextMenu={(e) => e.preventDefault()}
                   onClick={() => setSelectedCashColumn(columnKey)}
                 >
                   <span>{cash.driverName || columnKey}</span>
@@ -2431,7 +2431,7 @@ export default function Home() {
                 />
               </label>
             </div>
-            <button type="button" className="secondary-wide" onClick={syncSelectedRevenueFromFact} disabled={!canEditReport}>
+            <button type="button" className="secondary-wide no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={syncSelectedRevenueFromFact} disabled={!canEditReport}>
               <RefreshCcw size={18} />
               Выровнять выбранного водителя по факту
             </button>
@@ -2456,7 +2456,7 @@ export default function Home() {
               </div>
             </details>
 
-            <div className="custom-expense-panel">
+            <div className="custom-expense-panel no-ios-callout">
               <div className="panel-title">
                 <strong>Доп. расходы</strong>
                 <span>{(selectedCashInput.customExpenses ?? []).length}</span>
@@ -2482,7 +2482,7 @@ export default function Home() {
                 </button>
               </div>
               {(selectedCashInput.customExpenses ?? []).map((expense) => (
-                <div className="custom-expense-row" key={expense.id}>
+                <div className="custom-expense-row no-ios-callout" key={expense.id}>
                   <span>{expense.label}</span>
                   <strong>{currency(expense.amount)}</strong>
                   <button type="button" onClick={() => removeCustomExpense(expense.id)} disabled={!canEditReport} aria-label="Удалить доп расход">
@@ -2512,8 +2512,8 @@ export default function Home() {
             <Settings size={22} />
           </div>
 
-          <div className={missingCount ? "close-panel locked" : "close-panel ready"}>
-            <div className="close-status">
+          <div className={missingCount ? "close-panel locked no-ios-callout" : "close-panel ready no-ios-callout"}>
+            <div className="close-status no-ios-callout">
               {missingCount ? <Lock size={22} /> : <CheckCircle2 size={22} />}
               <div>
                 <strong>
@@ -2522,17 +2522,17 @@ export default function Home() {
                 <span>{missingCount ? `Осталось заполнить: ${missingCount} товаров` : "Проверка завершена"}</span>
               </div>
             </div>
-            <button type="button" className="primary-cta" onClick={closeDay} disabled={closeDisabled}>
+            <button type="button" className="primary-cta no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={closeDay} disabled={closeDisabled}>
               Закрыть день
             </button>
             {currentReport.closed && (
-              <button type="button" className="secondary-wide" onClick={reopenDay}>
+              <button type="button" className="secondary-wide no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={reopenDay}>
                 Открыть отчет снова
               </button>
             )}
           </div>
 
-          <div className="report-card">
+          <div className="report-card no-ios-callout">
             <h3>Отчет перед закрытием</h3>
             <ReportRow label="Продано" value={currency(revenue)} />
             <ReportRow label="Перемещения" value={currency(transferValue)} />
@@ -2553,7 +2553,7 @@ export default function Home() {
             </div>
           )}
 
-          <details className="analytics-panel">
+          <details className="analytics-panel no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}>
             <summary>
               Общая статистика
               <ChevronDown size={16} />
@@ -2580,7 +2580,7 @@ export default function Home() {
             </div>
           </details>
 
-          <details className="carryover-panel">
+          <details className="carryover-panel no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}>
             <summary>
               Контроль остатков
               <ChevronDown size={16} />
@@ -2591,13 +2591,13 @@ export default function Home() {
             </div>
             <ReportRow label="Вчерашний отчет закрыт" value={carryoverAudit.previousClosed ? "Да" : "Нет"} tone={carryoverAudit.previousClosed ? "good" : "bad"} />
             <ReportRow label="Перенесено позиций" value={`${carryoverAudit.currentPreviousRestCount} / ${inventoryLines.length}`} />
-            <button type="button" className="secondary-wide" onClick={carryForwardCurrentRests} disabled={!canEditReport}>
+            <button type="button" className="secondary-wide no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={carryForwardCurrentRests} disabled={!canEditReport}>
               <RefreshCcw size={18} />
               Перенести остатки на сегодня
             </button>
           </details>
 
-          <div className="settings-panel">
+          <div className="settings-panel no-ios-callout">
             <label>
               Дата отчета
               <input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
@@ -2627,12 +2627,12 @@ export default function Home() {
               </select>
             </label>
             <div className="settings-actions">
-              <button type="button" className="secondary-action" onClick={() => importInputRef.current?.click()} aria-label="Импорт из шаблона" title="Импорт из шаблона">
+              <button type="button" className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => importInputRef.current?.click()} aria-label="Импорт из шаблона" title="Импорт из шаблона">
                 <Upload size={18} />
               </button>
               <button
                 type="button"
-                className="secondary-action"
+                className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
                 onClick={generateDiscrepancyImage}
                 disabled={discrepancyLines.length === 0}
                 aria-label="Отчет расхождений"
@@ -2642,7 +2642,7 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                className="secondary-action"
+                className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
                 onClick={resetRestsToZeroWithoutShortage}
                 disabled={!canEditReport}
                 aria-label="Обнулить без недостачи"
@@ -2652,7 +2652,7 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                className="secondary-action"
+                className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
                 onClick={checkSupabaseConnection}
                 disabled={serverCheck.status === "checking"}
                 aria-label="Проверить Supabase"
@@ -2662,7 +2662,7 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                className="secondary-action"
+                className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
                 onClick={() => setUiSoundEnabled((current) => !current)}
                 aria-label={uiSoundEnabled ? "Выключить звук" : "Включить звук"}
                 title={uiSoundEnabled ? "Выключить звук" : "Включить звук"}
@@ -2671,7 +2671,7 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                className="secondary-action"
+                className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
                 onClick={() => setSpeechEnabled((current) => !current)}
                 aria-label={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
                 title={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
@@ -2679,20 +2679,20 @@ export default function Home() {
                 {speechEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
               </button>
             </div>
-            <div className={`server-status ${serverCheck.status}`}>
+            <div className={`server-status ${serverCheck.status} no-ios-callout`}>
               {serverCheck.message}
             </div>
             <div className="download-actions">
-              <button type="button" className="secondary-action" onClick={() => exportExcel("single")} aria-label="Отчет точки" title="Отчет точки">
+              <button type="button" className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => exportExcel("single")} aria-label="Отчет точки" title="Отчет точки">
                 <Download size={18} />
               </button>
-              <button type="button" className="secondary-action" onClick={() => exportExcel("all")} aria-label="Все точки" title="Все точки">
+              <button type="button" className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => exportExcel("all")} aria-label="Все точки" title="Все точки">
                 <Download size={18} />
               </button>
             </div>
           </div>
 
-          <details className="directory-panel">
+          <details className="directory-panel no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}>
             <summary>
               Справочники
               <ChevronDown size={16} />
@@ -2710,9 +2710,9 @@ export default function Home() {
                 </button>
               </div>
               {state.points.map((point) => (
-                <div className="admin-row" key={point.id}>
+                <div className="admin-row no-ios-callout" key={point.id}>
                   <input value={point.name} onChange={(event) => updatePoint(point.id, { name: event.target.value })} />
-                  <label className="mini-toggle">
+                  <label className="mini-toggle no-ios-callout">
                     <input type="checkbox" checked={point.active} onChange={(event) => updatePoint(point.id, { active: event.target.checked })} />
                     Активна
                   </label>
@@ -2751,7 +2751,7 @@ export default function Home() {
                       </option>
                     ))}
                   </select>
-                  <label className="mini-toggle">
+                  <label className="mini-toggle no-ios-callout">
                     <input type="checkbox" checked={driver.active} onChange={(event) => updateDriver(driver.id, { active: event.target.checked })} />
                     Активен
                   </label>
@@ -2782,7 +2782,7 @@ export default function Home() {
               </label>
               <div className="product-admin-list">
                 {adminProducts.map((product) => (
-                  <div className="product-admin-row" key={product.id}>
+                  <div className="product-admin-row no-ios-callout" key={product.id}>
                     <div className="order-controls">
                       <button type="button" onClick={() => moveProductShelf(product.id, -1)} aria-label="Выше">
                         <ArrowUp size={14} />
@@ -2802,11 +2802,11 @@ export default function Home() {
                       onChange={(event) => updateProduct(product.id, { quantityStep: Math.max(0.01, parseNumber(event.target.value) || 1) })}
                       aria-label="Шаг"
                     />
-                    <label className="mini-toggle">
+                    <label className="mini-toggle no-ios-callout">
                       <input type="checkbox" checked={Boolean(product.allowDecimal)} onChange={(event) => updateProduct(product.id, { allowDecimal: event.target.checked, quantityStep: event.target.checked ? product.quantityStep ?? 0.5 : 1 })} />
                       0.5
                     </label>
-                    <label className="mini-toggle">
+                    <label className="mini-toggle no-ios-callout">
                       <input type="checkbox" checked={product.active} onChange={(event) => updateProduct(product.id, { active: event.target.checked })} />
                       Актив.
                     </label>
@@ -2829,7 +2829,7 @@ export default function Home() {
                 <span className="overline">Заполнение</span>
                 <h2>{filledCount} / {inventoryLines.length}</h2>
               </div>
-              <button type="button" className="icon-button" onClick={() => setProgressOpen(false)} aria-label="Закрыть список заполнения">
+              <button type="button" className="icon-button no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => setProgressOpen(false)} aria-label="Закрыть список заполнения">
                 <X size={20} />
               </button>
             </div>
@@ -2910,7 +2910,7 @@ function Metric({ label, value, tone }: { label: string; value: string; tone: "g
 function ProductPickButton({ line, onClick }: { line: ReportLine; onClick: () => void }) {
   const tone = lineTone(line);
   return (
-    <button type="button" className="product-pick" onClick={onClick}>
+    <button type="button" className="product-pick no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={onClick}>
       <span className={`dot ${tone}`} />
       <div>
         <strong>{line.rowNumber}. {line.product.name}</strong>
@@ -2925,7 +2925,7 @@ function ProductPickButton({ line, onClick }: { line: ReportLine; onClick: () =>
 
 function ReportRow({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "bad" }) {
   return (
-    <div className="report-row">
+    <div className="report-row no-ios-callout">
       <span>{label}</span>
       <strong className={tone === "bad" ? "bad-text" : tone === "good" ? "good-text" : ""}>{value}</strong>
     </div>
@@ -2934,11 +2934,11 @@ function ReportRow({ label, value, tone = "neutral" }: { label: string; value: s
 
 function TopList({ title, items }: { title: string; items: Array<{ label: string; value: string }> }) {
   return (
-    <div className="top-list">
+    <div className="top-list no-ios-callout">
       <h3>{title}</h3>
       {items.length ? (
         items.map((item, index) => (
-          <div className="report-row" key={`${item.label}-${index}`}>
+          <div className="report-row no-ios-callout" key={`${item.label}-${index}`}>
             <span>
               {index + 1}. {item.label}
             </span>
@@ -2966,7 +2966,7 @@ function NavButton({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className={active ? "active" : ""} onClick={onClick} aria-label={label} title={label}>
+    <button type="button" className={active ? "active no-ios-callout tap-target" : "no-ios-callout tap-target"} onContextMenu={(e) => e.preventDefault()} onClick={onClick} aria-label={label} title={label}>
       <span className="nav-icon">
         {icon}
         {Boolean(badge) && <b>{badge}</b>}
