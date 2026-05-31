@@ -307,6 +307,7 @@ export default function Home() {
   const [newCustomExpense, setNewCustomExpense] = useState({ label: "", amount: "" });
   const [productAdminSearch, setProductAdminSearch] = useState("");
   const [quickPreviewRest, setQuickPreviewRest] = useState<number | undefined>(undefined);
+  const [quickDraftDisplay, setQuickDraftDisplay] = useState("");
   const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
   const [bulkRestValue, setBulkRestValue] = useState("");
   const [importMode, setImportMode] = useState<ImportMode>("merge");
@@ -333,7 +334,6 @@ export default function Home() {
     comment: ""
   });
 
-  const quickInputRef = useRef<HTMLInputElement>(null);
   const quickDraftRef = useRef("");
   const quickCommitTimerRef = useRef<number | undefined>(undefined);
   const pendingQuickCommitRef = useRef<{ productId: string; value: number | undefined } | null>(null);
@@ -410,6 +410,17 @@ export default function Home() {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
+  }, []);
+
+  useEffect(() => {
+    const handler = (event: MouseEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) return;
+      if (target.closest('input, textarea, [contenteditable="true"]')) return;
+      event.preventDefault();
+    };
+    window.addEventListener("contextmenu", handler);
+    return () => window.removeEventListener("contextmenu", handler);
   }, []);
 
   useEffect(() => {
@@ -609,16 +620,10 @@ export default function Home() {
   }, [quickIndex, quickLines.length]);
 
   useEffect(() => {
-    if (activeTab !== "inventory" || inventoryView !== "quick") return;
-    const id = window.setTimeout(() => quickInputRef.current?.blur(), 20);
-    return () => window.clearTimeout(id);
-  }, [activeTab, inventoryView, quickIndex, quickLine?.product.id]);
-
-  useEffect(() => {
     const nextDraft = quickLine ? formatQuantity(quickLine.homeRest, quickLine.product) : "";
     quickDraftRef.current = nextDraft;
+    setQuickDraftDisplay(nextDraft);
     setQuickPreviewRest(quickLine?.homeRest);
-    if (quickInputRef.current) quickInputRef.current.value = nextDraft;
   }, [quickLine?.product.id]);
 
   useEffect(() => {
@@ -1461,12 +1466,12 @@ export default function Home() {
     startQuick();
   }
 
-  function saveQuickValue(value: string, input?: HTMLInputElement) {
+  function saveQuickValue(value: string) {
     if (!quickLine) return;
     const normalized = normalizeQuantityInput(value, quickLine.product);
     const parsed = parseOptionalQuantity(normalized, quickLine.product);
     quickDraftRef.current = normalized;
-    if (input && input.value !== normalized) input.value = normalized;
+    setQuickDraftDisplay(normalized);
     setQuickPreviewRest(parsed);
     setIsOverrideConfirmed(false);
     scheduleQuickCommit(quickLine.product.id, parsed);
@@ -1478,7 +1483,7 @@ export default function Home() {
     const next = Math.max(0, parseQuantity(String(current + direction * quantityStep(quickLine.product)), quickLine.product));
     const formatted = formatQuantity(next, quickLine.product);
     quickDraftRef.current = formatted;
-    if (quickInputRef.current) quickInputRef.current.value = formatted;
+    setQuickDraftDisplay(formatted);
     setQuickPreviewRest(next);
     setIsOverrideConfirmed(false);
     scheduleQuickCommit(quickLine.product.id, next);
@@ -1508,7 +1513,7 @@ export default function Home() {
     const normalized = normalizeQuantityInput(value, quickLine.product);
     const parsed = parseOptionalQuantity(normalized, quickLine.product);
     quickDraftRef.current = normalized;
-    if (quickInputRef.current) quickInputRef.current.value = normalized;
+    setQuickDraftDisplay(normalized);
     setQuickPreviewRest(parsed);
     setIsOverrideConfirmed(false);
     scheduleQuickCommit(quickLine.product.id, parsed);
@@ -1561,7 +1566,7 @@ export default function Home() {
     const value = parseQuantity(String(quickLine.previousRest), quickLine.product);
     const formatted = formatQuantity(value, quickLine.product);
     quickDraftRef.current = formatted;
-    if (quickInputRef.current) quickInputRef.current.value = formatted;
+    setQuickDraftDisplay(formatted);
     setQuickPreviewRest(value);
     pendingQuickCommitRef.current = { productId: quickLine.product.id, value };
     flushQuickCommit();
@@ -1783,7 +1788,7 @@ export default function Home() {
               </label>
 
               <details className="bulk-panel">
-                <summary>
+                <summary className="no-ios-callout tap-target">
                   <span>Массово</span>
                   <strong>{bulkSelectedIds.length}</strong>
                   <ChevronDown size={16} />
@@ -1824,15 +1829,36 @@ export default function Home() {
 
               <div className="inventory-list">
                 {visibleInventoryLines.map((line) => (
-                  <div className={`inventory-list-row ${lineTone(line)}`} key={line.product.id}>
+                  <div
+                    className={`inventory-list-row no-ios-callout tap-target ${lineTone(line)}`}
+                    key={line.product.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => startQuick(line.product.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        startQuick(line.product.id);
+                      }
+                    }}
+                  >
                     <div className="inventory-product-cell">
                       <button
                         type="button"
                         className={bulkSelectedIds.includes(line.product.id) ? "select-box active" : "select-box"}
-                        onClick={() => toggleBulkProduct(line.product.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleBulkProduct(line.product.id);
+                        }}
                         aria-label="Выбрать товар"
                       />
-                      <button type="button" onClick={() => startQuick(line.product.id)}>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          startQuick(line.product.id);
+                        }}
+                      >
                         <span className={`dot ${lineTone(line)}`} />
                         <strong>{line.rowNumber}. {line.product.name}</strong>
                       </button>
@@ -1929,33 +1955,9 @@ export default function Home() {
                   <label className="rest-input">
                     <span>ОСТАТОК</span>
                     <div className="rest-stepper solo">
-                      <input
-                        key={quickLine.product.id}
-                        ref={quickInputRef}
-                        inputMode="none"
-                        type="text"
-                        readOnly
-                        tabIndex={-1}
-                        defaultValue={formatQuantity(quickLine.homeRest, quickLine.product)}
-                        onFocus={(event) => event.currentTarget.blur()}
-                        onBlur={flushQuickCommit}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            goNext();
-                          }
-                          if (event.key === "ArrowUp") {
-                            event.preventDefault();
-                            adjustQuickRest(1);
-                          }
-                          if (event.key === "ArrowDown") {
-                            event.preventDefault();
-                            adjustQuickRest(-1);
-                          }
-                        }}
-                        disabled={!canEditReport}
-                        aria-label="Остаток товара"
-                      />
+                      <div className="stock-display no-ios-callout" aria-label="Остаток товара">
+                        {quickDraftDisplay}
+                      </div>
                       {typeof quickPreviewRest === "number" && (
                         <span className="rest-check" aria-hidden="true">
                           <CheckCircle2 size={18} />
@@ -1997,7 +1999,7 @@ export default function Home() {
                   </div>
 
                   <details className="quick-extra">
-                    <summary>
+                    <summary className="no-ios-callout tap-target">
                       Подробнее
                       <ChevronDown size={16} />
                     </summary>
@@ -2297,7 +2299,7 @@ export default function Home() {
               ))}
               {receiptIgnoredLines.length > 0 && (
                 <details className="receipt-ignored" open={receiptIgnoredOpen} onToggle={(event) => setReceiptIgnoredOpen(event.currentTarget.open)}>
-                  <summary>Игнорировано строк: {receiptIgnoredLines.length}</summary>
+                  <summary className="no-ios-callout tap-target">Игнорировано строк: {receiptIgnoredLines.length}</summary>
                   <div>
                     {receiptIgnoredLines.map((line, index) => (
                       <span key={`${line}-${index}`}>{line}</span>
@@ -2369,7 +2371,7 @@ export default function Home() {
           </div>
 
           <details className="finance-more">
-            <summary>
+            <summary className="no-ios-callout tap-target">
               Подробнее
               <ChevronDown size={16} />
             </summary>
@@ -2437,7 +2439,7 @@ export default function Home() {
             </button>
 
             <details>
-              <summary>
+              <summary className="no-ios-callout tap-target">
                 Расходы и скидки
                 <ChevronDown size={16} />
               </summary>
@@ -2554,7 +2556,7 @@ export default function Home() {
           )}
 
           <details className="analytics-panel">
-            <summary>
+            <summary className="no-ios-callout tap-target">
               Общая статистика
               <ChevronDown size={16} />
             </summary>
@@ -2581,7 +2583,7 @@ export default function Home() {
           </details>
 
           <details className="carryover-panel">
-            <summary>
+            <summary className="no-ios-callout tap-target">
               Контроль остатков
               <ChevronDown size={16} />
             </summary>
@@ -2693,7 +2695,7 @@ export default function Home() {
           </div>
 
           <details className="directory-panel">
-            <summary>
+            <summary className="no-ios-callout tap-target">
               Справочники
               <ChevronDown size={16} />
             </summary>
@@ -2966,7 +2968,13 @@ function NavButton({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className={active ? "active" : ""} onClick={onClick} aria-label={label} title={label}>
+    <button
+      type="button"
+      className={`${active ? "active " : ""}no-ios-callout tap-target`}
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+    >
       <span className="nav-icon">
         {icon}
         {Boolean(badge) && <b>{badge}</b>}

@@ -68,12 +68,66 @@ button {
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
   user-select: none;
 }
 
 button:active {
   transform: scale(0.96);
   transition: transform 0.06s ease-out;
+}
+
+.no-ios-callout,
+.no-ios-callout * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.no-ios-callout input,
+.no-ios-callout textarea,
+.no-ios-callout [contenteditable="true"] {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.tap-target {
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+button,
+a,
+summary,
+[role="button"],
+.inventory-list-row,
+.product-pick,
+.movement-row,
+.bottom-nav button,
+.icon-button,
+.tab-button,
+.nav-item,
+.card-clickable,
+.primary-action,
+.secondary-action,
+.primary-cta,
+.secondary-wide {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 button:disabled,
@@ -973,6 +1027,21 @@ label {
   text-align: center;
 }
 
+.rest-input .stock-display {
+  display: grid;
+  place-items: center;
+  height: 78px;
+  min-height: 48px;
+  border: 1px solid var(--teal);
+  border-radius: var(--radius);
+  background: #10120d;
+  color: var(--text);
+  font-size: 42px;
+  font-weight: 950;
+  letter-spacing: 0;
+  text-align: center;
+}
+
 .number-pad {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1229,6 +1298,21 @@ label {
   color: #f4f7fa;
   caret-color: transparent;
   pointer-events: none;
+  font-size: 42px;
+  font-weight: 950;
+  line-height: 1;
+  text-align: center;
+}
+
+.focus-mode .rest-input .stock-display {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 2px solid #43d7cf;
+  border-radius: 18px;
+  background: rgba(5, 15, 18, 0.88);
+  color: #f4f7fa;
   font-size: 42px;
   font-weight: 950;
   line-height: 1;
