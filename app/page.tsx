@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  BarChart3,
   CheckCircle2,
   ChevronDown,
   Download,
@@ -20,7 +19,6 @@ import {
   RefreshCcw,
   Search,
   Settings,
-  Star,
   Truck,
   Upload,
   Volume2,
@@ -29,12 +27,11 @@ import {
   Wifi,
   X
 } from "lucide-react";
-import { startTransition, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import {
   calculateCash,
   calculateCashColumns,
   calculateCashTotal,
-  calculateDashboard,
   calculateReportLines,
   calculateReportRevenue,
   canCloseReport,
@@ -66,7 +63,7 @@ import type {
 
 type Tab = "home" | "inventory" | "receipts" | "transfers" | "finance" | "more";
 type CategoryId = "spirits" | "beer" | "wine" | "sparkling" | "premium";
-type InventoryView = "categories" | "quick" | "list";
+type InventoryView = "quick" | "list";
 type LineTone = "empty" | "done" | "warn";
 type ServerCheck = { status: "idle" | "checking" | "ok" | "error"; message: string };
 
@@ -141,6 +138,8 @@ const todayIso = () => {
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
+
+const shortDate = (date: string) => date.split("-").reverse().join("/");
 
 const makeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const currency = (value: number) => `${value.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} AED`;
@@ -269,8 +268,7 @@ export default function Home() {
   const [state, setState] = useState<AppState>(() => createInitialState());
   const [hydrated, setHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("home");
-  const [inventoryView, setInventoryView] = useState<InventoryView>("categories");
-  const [selectedCategory, setSelectedCategory] = useState<CategoryId | null>(null);
+  const [inventoryView, setInventoryView] = useState<InventoryView>("list");
   const [quickIndex, setQuickIndex] = useState(0);
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [selectedPointId, setSelectedPointId] = useState("jvc");
@@ -365,7 +363,6 @@ export default function Home() {
   );
   const cashColumns = useMemo(() => calculateCashColumns(currentReport), [currentReport]);
   const cashTotal = useMemo(() => calculateCashTotal(currentReport), [currentReport]);
-  const dashboardDaySales = useMemo(() => (activeTab === "home" ? calculateDashboard(state, selectedDate).daySales : 0), [activeTab, selectedDate, state]);
   const reportWarningList = useMemo(() => (activeTab === "more" ? getReportWarnings(state, currentReport) : []), [activeTab, currentReport, state]);
   const errorWarningCount = reportWarningList.filter((warning) => warning.severity === "error").length;
   const selectedPoint = state.points.find((point) => point.id === selectedPointId);
@@ -373,7 +370,6 @@ export default function Home() {
   const filledCount = inventoryLines.filter((line) => typeof line.homeRest === "number").length;
   const missingCount = Math.max(inventoryLines.length - filledCount, 0);
   const problemCount = countProblems(inventoryLines);
-  const progressPercent = inventoryLines.length ? Math.round((filledCount / inventoryLines.length) * 100) : 0;
   const visibleCashColumns = cashColumns.filter((cash) => cash.driverName || hasCashValues(cash));
   const cashColumnKeys = (visibleCashColumns.length ? visibleCashColumns : cashColumns.filter((cash) => cash.columnKey === "F")).map(
     (cash) => (cash.columnKey ?? "F") as CashColumnKey
@@ -396,25 +392,7 @@ export default function Home() {
     [inventoryLines]
   );
 
-  const categoryCards = useMemo(
-    () =>
-      categoryDefs.map((category) => {
-        const lines = inventoryLines.filter((line) => productMatchesCategory(line.product, category.id));
-        const filled = lines.filter((line) => typeof line.homeRest === "number").length;
-        return {
-          ...category,
-          total: lines.length,
-          filled,
-          missing: Math.max(lines.length - filled, 0)
-        };
-      }),
-    [inventoryLines]
-  );
-
-  const quickLines = useMemo(() => {
-    const lines = selectedCategory ? inventoryLines.filter((line) => productMatchesCategory(line.product, selectedCategory)) : inventoryLines;
-    return lines.length ? lines : inventoryLines;
-  }, [inventoryLines, selectedCategory]);
+  const quickLines = inventoryLines;
 
   const quickLine = quickLines[quickIndex] ?? null;
 
@@ -1041,7 +1019,6 @@ export default function Home() {
     const driver = state.drivers.find((item) => item.pointId === pointId && item.active);
     setSelectedPointId(pointId);
     setSelectedDriverId(driver?.id ?? selectedDriverId);
-    setSelectedCategory(null);
     setQuickIndex(0);
     setTransferForm((current) => ({
       ...current,
@@ -1050,12 +1027,10 @@ export default function Home() {
     }));
   }
 
-  function startQuick(productId?: string, categoryId?: CategoryId | null) {
-    const category = categoryId === undefined ? selectedCategory : categoryId;
-    const lines = category ? inventoryLines.filter((line) => productMatchesCategory(line.product, category)) : inventoryLines;
+  function startQuick(productId?: string) {
+    const lines = inventoryLines;
     const fallbackIndex = lines.findIndex((line) => typeof line.homeRest !== "number");
     const productIndex = productId ? lines.findIndex((line) => line.product.id === productId) : -1;
-    setSelectedCategory(category ?? null);
     setQuickIndex(productIndex >= 0 ? productIndex : Math.max(fallbackIndex, 0));
     setInventoryView("quick");
     setActiveTab("inventory");
@@ -1066,7 +1041,7 @@ export default function Home() {
       setActiveTab("more");
       return;
     }
-    startQuick(undefined, null);
+    startQuick();
   }
 
   function saveQuickValue(value: string, input?: HTMLInputElement) {
@@ -1118,8 +1093,8 @@ export default function Home() {
       setQuickIndex((current) => current + 1);
       return;
     }
-    setInventoryView("categories");
-    setNotice("Категория заполнена. Можно перейти к следующей.");
+    setInventoryView("list");
+    setNotice("Инвентаризация заполнена.");
   }
 
   function goPrev() {
@@ -1207,37 +1182,34 @@ export default function Home() {
     quickLine && typeof quickPreviewRest === "number" ? parseNumber(String(quickLine.available - quickPreviewRest)) : undefined;
   const quickPreviewAmount =
     quickLine && typeof quickPreviewSale === "number" ? parseNumber(String(quickPreviewSale * quickLine.product.price)) : undefined;
+  const isFocusMode = activeTab === "inventory" && inventoryView === "quick";
 
   return (
-    <main className="app-shell">
-      <header className="app-header">
-        <div>
-          <span className="overline">Ежедневное закрытие</span>
-          <h1>{selectedPoint?.name ?? "Точка"}</h1>
-        </div>
-        <input
-          className="date-control"
-          type="date"
-          value={selectedDate}
-          onChange={(event) => setSelectedDate(event.target.value)}
-          aria-label="Дата"
-        />
-      </header>
-
-      <section className="point-strip" aria-label="Точки">
-        {state.points
-          .filter((point) => point.active)
-          .map((point) => (
-            <button
-              type="button"
-              key={point.id}
-              className={point.id === selectedPointId ? "active" : ""}
-              onClick={() => selectPoint(point.id)}
-            >
-              {point.name}
-            </button>
-          ))}
-      </section>
+    <main className={isFocusMode ? "app-shell focus-mode" : "app-shell"}>
+      {!isFocusMode && (
+        <header className="app-header">
+          <label className="point-select">
+            <select value={selectedPointId} onChange={(event) => selectPoint(event.target.value)} aria-label="Точка">
+              {state.points.filter((point) => point.active).map((point) => (
+                <option key={point.id} value={point.id}>
+                  {point.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={16} />
+          </label>
+          <label className="date-pill">
+            <span>{shortDate(selectedDate)}</span>
+            <input
+              className="date-control"
+              type="date"
+              value={selectedDate}
+              onChange={(event) => setSelectedDate(event.target.value)}
+              aria-label="Дата"
+            />
+          </label>
+        </header>
+      )}
 
       {notice && (
         <section className="notice">
@@ -1257,120 +1229,36 @@ export default function Home() {
         <section className="screen home-screen">
           <button type="button" className="hero-progress" onClick={() => setProgressOpen(true)}>
             <div>
-              <span className="overline">Заполнено</span>
+              <span className="overline">{shortDate(selectedDate)}</span>
               <strong>
                 {filledCount} / {inventoryLines.length}
               </strong>
             </div>
-            <div className="progress-ring" style={{ "--progress": `${progressPercent}%` } as CSSProperties}>
-              <span>{progressPercent}%</span>
-            </div>
+            <Package size={28} />
           </button>
 
           <div className="home-metrics">
-            <Metric label="Осталось" value={`${missingCount} товаров`} tone={missingCount ? "warn" : "good"} />
+            <Metric label="Осталось" value={`${missingCount} товаров`} tone={missingCount ? "warn" : "neutral"} />
             <Metric label="Выручка" value={currency(revenue)} tone="neutral" />
-            <Metric label="Сдали" value={currency(cashTotal.handedOver)} tone="neutral" />
             <Metric label="Недостача" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
           </div>
 
-          <button type="button" className="primary-cta" onClick={continueFill}>
+          <button
+            type="button"
+            className="primary-cta icon-cta"
+            onClick={continueFill}
+            aria-label={missingCount === 0 ? "Открыть закрытие дня" : "Продолжить заполнение"}
+            title={missingCount === 0 ? "Открыть закрытие дня" : "Продолжить"}
+          >
             {missingCount === 0 ? <CheckCircle2 size={20} /> : <ArrowRight size={20} />}
-            {missingCount === 0 ? "Открыть закрытие дня" : "Продолжить заполнение"}
           </button>
-
-          <div className="quiet-panel">
-            <div>
-              <span className="overline">Сегодня все точки</span>
-              <strong>{currency(dashboardDaySales)}</strong>
-            </div>
-            <BarChart3 size={22} />
-          </div>
         </section>
       )}
 
       {activeTab === "inventory" && (
         <section className="screen inventory-screen">
-          {inventoryView === "categories" && (
-            <>
-              <div className="screen-head">
-                <div>
-                  <span className="overline">Инвентаризация</span>
-                  <h2>Выберите категорию</h2>
-                </div>
-              </div>
-
-              <div className="view-switch" aria-label="Вид инвентаризации">
-                <button type="button" className="active" onClick={() => setInventoryView("categories")}>
-                  Категории
-                </button>
-                <button type="button" onClick={() => setInventoryView("list")}>
-                  Список
-                </button>
-              </div>
-
-              <label className="search-field">
-                <Search size={18} />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Поиск товара"
-                  aria-label="Поиск товара"
-                />
-              </label>
-
-              {search ? (
-                <div className="search-results">
-                  {searchResults.map((line) => (
-                    <ProductPickButton key={line.product.id} line={line} onClick={() => startQuick(line.product.id, null)} />
-                  ))}
-                  {searchResults.length === 0 && <div className="empty-state">Ничего не найдено</div>}
-                </div>
-              ) : (
-                <>
-                  <div className="favorite-row" aria-label="Избранные товары">
-                    {favoriteLines.map((line) => (
-                      <button type="button" key={line.product.id} onClick={() => startQuick(line.product.id, null)}>
-                        <Star size={14} />
-                        <span>{line.product.name.replace(/\s+(LTR|1 LTR|75CL|33CL|BTL|CANS?).*$/i, "")}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="category-grid">
-                    {categoryCards.map((category) => (
-                      <button type="button" className="category-card" key={category.id} onClick={() => startQuick(undefined, category.id)}>
-                        <span className="category-icon">{category.icon}</span>
-                        <span className="category-title">{category.title}</span>
-                        <span className={category.missing ? "category-status warn" : "category-status done"}>
-                          {category.filled} / {category.total}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </>
-          )}
-
           {inventoryView === "list" && (
             <>
-              <div className="screen-head">
-                <div>
-                  <span className="overline">Инвентаризация</span>
-                  <h2>Все товары</h2>
-                </div>
-              </div>
-
-              <div className="view-switch" aria-label="Вид инвентаризации">
-                <button type="button" onClick={() => setInventoryView("categories")}>
-                  Категории
-                </button>
-                <button type="button" className="active" onClick={() => setInventoryView("list")}>
-                  Список
-                </button>
-              </div>
-
               <label className="search-field">
                 <Search size={18} />
                 <input
@@ -1381,11 +1269,12 @@ export default function Home() {
                 />
               </label>
 
-              <div className="bulk-panel">
-                <div className="panel-title">
-                  <strong>Массовое заполнение</strong>
-                  <span>{bulkSelectedIds.length}</span>
-                </div>
+              <details className="bulk-panel">
+                <summary>
+                  <span>Массово</span>
+                  <strong>{bulkSelectedIds.length}</strong>
+                  <ChevronDown size={16} />
+                </summary>
                 <div className="bulk-controls">
                   <input
                     inputMode="decimal"
@@ -1394,17 +1283,31 @@ export default function Home() {
                     placeholder="Одинаковый остаток"
                     disabled={!canEditReport}
                   />
-                  <button type="button" className="secondary-action" onClick={selectVisibleBulkProducts} disabled={!canEditReport}>
-                    Выбрать видимые
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={selectVisibleBulkProducts}
+                    disabled={!canEditReport}
+                    aria-label="Выбрать видимые"
+                    title="Выбрать видимые"
+                  >
+                    <CheckCircle2 size={18} />
                   </button>
-                  <button type="button" className="secondary-action" onClick={() => setBulkSelectedIds([])}>
-                    Очистить
+                  <button type="button" className="secondary-action" onClick={() => setBulkSelectedIds([])} aria-label="Очистить" title="Очистить">
+                    <X size={18} />
                   </button>
-                  <button type="button" className="primary-action" onClick={applyBulkRest} disabled={!canEditReport || bulkSelectedIds.length === 0}>
-                    Применить
+                  <button
+                    type="button"
+                    className="primary-action"
+                    onClick={applyBulkRest}
+                    disabled={!canEditReport || bulkSelectedIds.length === 0}
+                    aria-label="Применить"
+                    title="Применить"
+                  >
+                    <ArrowRight size={18} />
                   </button>
                 </div>
-              </div>
+              </details>
 
               <div className="inventory-list">
                 {visibleInventoryLines.map((line) => (
@@ -1416,7 +1319,7 @@ export default function Home() {
                         onClick={() => toggleBulkProduct(line.product.id)}
                         aria-label="Выбрать товар"
                       />
-                      <button type="button" onClick={() => startQuick(line.product.id, null)}>
+                      <button type="button" onClick={() => startQuick(line.product.id)}>
                         <span className={`dot ${lineTone(line)}`} />
                         <strong>{line.rowNumber}. {line.product.name}</strong>
                       </button>
@@ -1435,41 +1338,38 @@ export default function Home() {
           {inventoryView === "quick" && (
             <div className="quick-fill">
               <div className="quick-top">
-                <button type="button" className="ghost-button" onClick={() => setInventoryView("categories")}>
+                <button type="button" className="icon-button" onClick={() => setInventoryView("list")} aria-label="Вернуться к списку">
                   <ArrowLeft size={18} />
-                  Категории
                 </button>
                 <span>
-                  Товар {quickIndex + 1} из {quickLines.length}
+                  {quickIndex + 1} / {quickLines.length}
                 </span>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={generateDiscrepancyImage}
+                  disabled={discrepancyLines.length === 0}
+                  aria-label="Фото отчета"
+                  title="Фото отчета"
+                >
+                  <ImageDown size={18} />
+                </button>
               </div>
 
               {quickLine && (
                 <>
                   <div className={`quick-product ${quickTone}`}>
-                    <div className="status-line">
-                      <span className={`dot ${quickTone}`} />
-                      {lineStatusText(quickLine)}
-                    </div>
                     <h2>{quickLine.product.name}</h2>
                     <div className="quick-facts">
                       <div>
                         <span>Было</span>
                         <strong>{num(quickLine.previousRest)}</strong>
                       </div>
-                      <div>
-                        <span>Доступно</span>
-                        <strong>{num(quickLine.available)}</strong>
-                      </div>
-                      <div>
-                        <span>Цена</span>
-                        <strong>{currency(quickLine.product.price)}</strong>
-                      </div>
                     </div>
                   </div>
 
                   <label className="rest-input">
-                    <span>Введите остаток</span>
+                    <span>Остаток</span>
                     <div className="rest-stepper">
                       <button
                         type="button"
@@ -1527,73 +1427,85 @@ export default function Home() {
                     </div>
                   </label>
 
-                  <div className="auto-calc">
-                    <div>
-                      <span>Продано</span>
-                      <strong>{typeof quickPreviewSale === "number" ? num(quickPreviewSale) : "—"}</strong>
+                  <details className="quick-extra">
+                    <summary>
+                      Подробнее
+                      <ChevronDown size={16} />
+                    </summary>
+                    <div className="auto-calc">
+                      <div>
+                        <span>Продано</span>
+                        <strong>{typeof quickPreviewSale === "number" ? num(quickPreviewSale) : "—"}</strong>
+                      </div>
+                      <div>
+                        <span>Сумма</span>
+                        <strong>{typeof quickPreviewAmount === "number" ? currency(quickPreviewAmount) : "—"}</strong>
+                      </div>
                     </div>
-                    <div>
-                      <span>Сумма</span>
-                      <strong>{typeof quickPreviewAmount === "number" ? currency(quickPreviewAmount) : "—"}</strong>
-                    </div>
-                  </div>
 
-                  <div className={quickItem?.flagged ? "discrepancy-card active" : "discrepancy-card"}>
-                    <button
-                      type="button"
-                      className="secondary-wide"
-                      onPointerDown={(event) => event.preventDefault()}
-                      onClick={() => updateDiscrepancy(quickLine.product.id, { flagged: !quickItem?.flagged })}
-                      disabled={!canEditReport}
-                    >
-                      <AlertTriangle size={17} />
-                      {quickItem?.flagged ? "Расхождение отмечено" : "Отметить расхождение"}
-                    </button>
-                    {quickItem?.flagged && (
-                      <div className="discrepancy-fields">
-                        <label>
-                          Остаток у водителя
-                          <input
-                            inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
-                            value={formatQuantity(quickItem.driverRest, quickLine.product)}
-                            onChange={(event) =>
-                              updateDiscrepancy(quickLine.product.id, {
-                                driverRest: parseOptionalQuantity(event.target.value, quickLine.product)
-                              })
-                            }
-                            disabled={!canEditReport}
-                          />
-                        </label>
-                        <label>
-                          Продажа у водителя
-                          <input
-                            inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
-                            value={formatQuantity(quickItem.driverSale, quickLine.product)}
-                            onChange={(event) =>
-                              updateDiscrepancy(quickLine.product.id, {
-                                driverSale: parseOptionalQuantity(event.target.value, quickLine.product)
-                              })
-                            }
-                            disabled={!canEditReport}
-                          />
-                        </label>
+                    <div className={quickItem?.flagged ? "discrepancy-card active" : "discrepancy-card"}>
+                      <button
+                        type="button"
+                        className="secondary-wide"
+                        onPointerDown={(event) => event.preventDefault()}
+                        onClick={() => updateDiscrepancy(quickLine.product.id, { flagged: !quickItem?.flagged })}
+                        disabled={!canEditReport}
+                      >
+                        <AlertTriangle size={17} />
+                        {quickItem?.flagged ? "Расхождение отмечено" : "Отметить расхождение"}
+                      </button>
+                      {quickItem?.flagged && (
+                        <div className="discrepancy-fields">
+                          <label>
+                            Остаток у водителя
+                            <input
+                              inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
+                              value={formatQuantity(quickItem.driverRest, quickLine.product)}
+                              onChange={(event) =>
+                                updateDiscrepancy(quickLine.product.id, {
+                                  driverRest: parseOptionalQuantity(event.target.value, quickLine.product)
+                                })
+                              }
+                              disabled={!canEditReport}
+                            />
+                          </label>
+                          <label>
+                            Продажа у водителя
+                            <input
+                              inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
+                              value={formatQuantity(quickItem.driverSale, quickLine.product)}
+                              onChange={(event) =>
+                                updateDiscrepancy(quickLine.product.id, {
+                                  driverSale: parseOptionalQuantity(event.target.value, quickLine.product)
+                                })
+                              }
+                              disabled={!canEditReport}
+                            />
+                          </label>
+                        </div>
+                      )}
+                    </div>
+
+                    {quickTone === "warn" && (
+                      <div className="warning-note">
+                        <AlertTriangle size={18} />
+                        Проверьте данные
                       </div>
                     )}
-                  </div>
-
-                  {quickTone === "warn" && (
-                    <div className="warning-note">
-                      <AlertTriangle size={18} />
-                      Проверьте данные
-                    </div>
-                  )}
+                  </details>
 
                   <div className="quick-actions">
                     <button type="button" className="secondary-action" onClick={goPrev} disabled={quickIndex === 0}>
                       <ArrowLeft size={18} />
                     </button>
-                    <button type="button" className="primary-action" onPointerDown={(event) => event.preventDefault()} onClick={goNext}>
-                      Следующий
+                    <button
+                      type="button"
+                      className="primary-action"
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={goNext}
+                      aria-label="Следующий товар"
+                      title="Следующий"
+                    >
                       <ArrowRight size={18} />
                     </button>
                   </div>
@@ -1606,14 +1518,6 @@ export default function Home() {
 
       {activeTab === "transfers" && (
         <section className="screen transfer-screen">
-          <div className="screen-head">
-            <div>
-              <span className="overline">Перемещения</span>
-              <h2>Отдельно от продаж</h2>
-            </div>
-            <Truck size={22} />
-          </div>
-
           <div className="transfer-card">
             <label className="search-field compact">
               <Search size={17} />
@@ -1705,9 +1609,8 @@ export default function Home() {
               </label>
             </div>
 
-            <button type="button" className="primary-cta" onClick={addTransfer} disabled={!canEditReport}>
+            <button type="button" className="primary-cta icon-cta" onClick={addTransfer} disabled={!canEditReport} aria-label="Переместить" title="Переместить">
               <Truck size={20} />
-              Переместить
             </button>
           </div>
 
@@ -1736,19 +1639,6 @@ export default function Home() {
 
       {activeTab === "receipts" && (
         <section className="screen receipts-screen">
-          <div className="screen-head">
-            <div>
-              <span className="overline">Приходы</span>
-              <h2>Поступления товара</h2>
-            </div>
-            <PackagePlus size={22} />
-          </div>
-
-          <div className="receipt-summary">
-            <Metric label="Позиций с приходом" value={`${inventoryLines.filter((line) => line.incoming > 0).length}`} tone="neutral" />
-            <Metric label="Всего единиц" value={num(inventoryLines.reduce((total, line) => total + line.incoming, 0))} tone="good" />
-          </div>
-
           <label className="search-field">
             <Search size={18} />
             <input
@@ -1764,7 +1654,7 @@ export default function Home() {
               <div className="receipt-row" key={line.product.id}>
                 <div>
                   <strong>{line.rowNumber}. {line.product.name}</strong>
-                  <span>Было {num(line.previousRest)} · доступно {num(line.available)}</span>
+                  <span>{num(line.previousRest)}</span>
                 </div>
                 <div className="small-stepper">
                   <button type="button" onClick={() => adjustIncoming(line.product.id, -1)} disabled={!canEditReport} aria-label="Уменьшить приход">
@@ -1799,30 +1689,28 @@ export default function Home() {
 
       {activeTab === "finance" && (
         <section className="screen finance-screen">
-          <div className="screen-head">
-            <div>
-              <span className="overline">Финансы</span>
-              <h2>Касса и разница</h2>
-            </div>
-            <WalletCards size={22} />
-          </div>
-
           <div className="finance-grid">
-            <Metric label="Факт продаж" value={currency(revenue)} tone="neutral" />
-            <Metric label="Водители" value={currency(cashTotal.productRevenue)} tone={Math.abs(financeRevenueGap) > 0.01 ? "warn" : "good"} />
-            <Metric label="Разница факт" value={currency(financeRevenueGap)} tone={Math.abs(financeRevenueGap) > 0.01 ? "bad" : "good"} />
+            <Metric label="Продано" value={currency(revenue)} tone="neutral" />
             <Metric label="Сдали" value={currency(cashTotal.handedOver)} tone="neutral" />
-            <Metric label="Скидки" value={currency(financeTotals.discounts)} tone="warn" />
-            <Metric label="Расходы" value={currency(financeTotals.expenses)} tone="warn" />
-            <Metric label="Недостача" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
+            <Metric label="Разница" value={currency(financeRevenueGap)} tone={Math.abs(financeRevenueGap) > 0.01 ? "bad" : "good"} />
           </div>
 
-          {Math.abs(financeRevenueGap) > 0.01 && (
-            <div className="warning-note">
-              <AlertTriangle size={18} />
-              Выручка водителей не совпадает с продажами по факту.
-            </div>
-          )}
+          <details className="finance-more">
+            <summary>
+              Подробнее
+              <ChevronDown size={16} />
+            </summary>
+            <ReportRow label="Водители" value={currency(cashTotal.productRevenue)} tone={Math.abs(financeRevenueGap) > 0.01 ? "bad" : "good"} />
+            <ReportRow label="Скидки" value={currency(financeTotals.discounts)} />
+            <ReportRow label="Расходы" value={currency(financeTotals.expenses)} />
+            <ReportRow label="Недостача" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
+            {Math.abs(financeRevenueGap) > 0.01 && (
+              <div className="warning-note">
+                <AlertTriangle size={18} />
+                Выручка водителей не совпадает с продажами по факту.
+              </div>
+            )}
+          </details>
 
           <div className="driver-tabs" aria-label="Водители">
             {cashColumnKeys.map((columnKey) => {
@@ -1992,10 +1880,14 @@ export default function Home() {
             </div>
           )}
 
-          <div className="analytics-panel">
+          <details className="analytics-panel">
+            <summary>
+              Общая статистика
+              <ChevronDown size={16} />
+            </summary>
             <div className="panel-title">
-              <strong>Общая статистика</strong>
-              <span>{analytics.weekStart} → {selectedDate}</span>
+              <strong>{analytics.weekStart} → {selectedDate}</strong>
+              <span />
             </div>
             <div className="finance-grid">
               <Metric label="Неделя" value={currency(analytics.week.total)} tone="neutral" />
@@ -2013,12 +1905,16 @@ export default function Home() {
                 items={analytics.month.drivers.slice(0, 5).map((item) => ({ label: `${item.name} · ${item.point}`, value: currency(item.value) }))}
               />
             </div>
-          </div>
+          </details>
 
-          <div className="carryover-panel">
+          <details className="carryover-panel">
+            <summary>
+              Контроль остатков
+              <ChevronDown size={16} />
+            </summary>
             <div className="panel-title">
-              <strong>Контроль остатков</strong>
-              <span>{carryoverAudit.previousDate}</span>
+              <strong>{carryoverAudit.previousDate}</strong>
+              <span />
             </div>
             <ReportRow label="Вчерашний отчет закрыт" value={carryoverAudit.previousClosed ? "Да" : "Нет"} tone={carryoverAudit.previousClosed ? "good" : "bad"} />
             <ReportRow label="Перенесено позиций" value={`${carryoverAudit.currentPreviousRestCount} / ${inventoryLines.length}`} />
@@ -2026,7 +1922,7 @@ export default function Home() {
               <RefreshCcw size={18} />
               Перенести остатки на сегодня
             </button>
-          </div>
+          </details>
 
           <div className="settings-panel">
             <label>
@@ -2058,38 +1954,58 @@ export default function Home() {
               </select>
             </label>
             <div className="settings-actions">
-              <button type="button" className="secondary-action" onClick={() => importInputRef.current?.click()}>
+              <button type="button" className="secondary-action" onClick={() => importInputRef.current?.click()} aria-label="Импорт из шаблона" title="Импорт из шаблона">
                 <Upload size={18} />
-                Импорт из шаблона
               </button>
-              <button type="button" className="secondary-action" onClick={generateDiscrepancyImage} disabled={discrepancyLines.length === 0}>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={generateDiscrepancyImage}
+                disabled={discrepancyLines.length === 0}
+                aria-label="Отчет расхождений"
+                title="Отчет расхождений"
+              >
                 <ImageDown size={18} />
-                Отчет расхождений
               </button>
-              <button type="button" className="secondary-action" onClick={resetRestsToZeroWithoutShortage} disabled={!canEditReport}>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={resetRestsToZeroWithoutShortage}
+                disabled={!canEditReport}
+                aria-label="Обнулить без недостачи"
+                title="Обнулить без недостачи"
+              >
                 <Eraser size={18} />
-                Обнулить без недостачи
               </button>
-              <button type="button" className="secondary-action" onClick={checkSupabaseConnection} disabled={serverCheck.status === "checking"}>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={checkSupabaseConnection}
+                disabled={serverCheck.status === "checking"}
+                aria-label="Проверить Supabase"
+                title="Проверить Supabase"
+              >
                 <Wifi size={18} />
-                Проверить Supabase
               </button>
-              <button type="button" className="secondary-action" onClick={() => setUiSoundEnabled((current) => !current)}>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={() => setUiSoundEnabled((current) => !current)}
+                aria-label={uiSoundEnabled ? "Выключить звук" : "Включить звук"}
+                title={uiSoundEnabled ? "Выключить звук" : "Включить звук"}
+              >
                 {uiSoundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-                {uiSoundEnabled ? "Звук включен" : "Звук выключен"}
               </button>
             </div>
             <div className={`server-status ${serverCheck.status}`}>
               {serverCheck.message}
             </div>
             <div className="download-actions">
-              <button type="button" className="secondary-action" onClick={() => exportExcel("single")}>
+              <button type="button" className="secondary-action" onClick={() => exportExcel("single")} aria-label="Отчет точки" title="Отчет точки">
                 <Download size={18} />
-                Отчет точки
               </button>
-              <button type="button" className="secondary-action" onClick={() => exportExcel("all")}>
+              <button type="button" className="secondary-action" onClick={() => exportExcel("all")} aria-label="Все точки" title="Все точки">
                 <Download size={18} />
-                Все точки
               </button>
             </div>
           </div>
@@ -2229,7 +2145,7 @@ export default function Home() {
                       line={line}
                       onClick={() => {
                         setProgressOpen(false);
-                        startQuick(line.product.id, null);
+                        startQuick(line.product.id);
                       }}
                     />
                   ))}
@@ -2247,7 +2163,7 @@ export default function Home() {
                       line={line}
                       onClick={() => {
                         setProgressOpen(false);
-                        startQuick(line.product.id, null);
+                        startQuick(line.product.id);
                       }}
                     />
                   ))}
@@ -2258,7 +2174,7 @@ export default function Home() {
         </div>
       )}
 
-      <nav className="bottom-nav" aria-label="Основное меню">
+      {!isFocusMode && <nav className="bottom-nav" aria-label="Основное меню">
         <NavButton icon={<HomeIcon size={20} />} label="Главная" active={activeTab === "home"} onClick={() => setActiveTab("home")} />
         <NavButton
           icon={<Package size={20} />}
@@ -2266,7 +2182,7 @@ export default function Home() {
           active={activeTab === "inventory"}
           badge={missingCount}
           onClick={() => {
-            setInventoryView("categories");
+            setInventoryView("list");
             setActiveTab("inventory");
           }}
         />
@@ -2274,9 +2190,9 @@ export default function Home() {
         <NavButton icon={<Truck size={20} />} label="Перемещ." active={activeTab === "transfers"} onClick={() => setActiveTab("transfers")} />
         <NavButton icon={<WalletCards size={20} />} label="Финансы" active={activeTab === "finance"} onClick={() => setActiveTab("finance")} />
         <NavButton icon={<MoreHorizontal size={20} />} label="Еще" active={activeTab === "more"} onClick={() => setActiveTab("more")} />
-      </nav>
+      </nav>}
 
-      {lastSaved && <span className="save-stamp">Сохранено {lastSaved}</span>}
+      {false && lastSaved && <span className="save-stamp">Автосохранение</span>}
     </main>
   );
 }
@@ -2349,12 +2265,11 @@ function NavButton({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className={active ? "active" : ""} onClick={onClick}>
+    <button type="button" className={active ? "active" : ""} onClick={onClick} aria-label={label} title={label}>
       <span className="nav-icon">
         {icon}
         {Boolean(badge) && <b>{badge}</b>}
       </span>
-      <span>{label}</span>
     </button>
   );
 }
