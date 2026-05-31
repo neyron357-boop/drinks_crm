@@ -79,6 +79,43 @@ body {
   cursor: pointer;
 }
 
+.stock-input {
+  caret-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+button,
+a,
+[role="button"],
+.product-row,
+.nav-item,
+.card-clickable,
+.tab-button,
+.icon-button,
+.inventory-list-row,
+.product-pick,
+.category-card,
+.metric,
+.primary-cta,
+.primary-action,
+.secondary-action,
+.secondary-wide,
+.ghost-button {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 nextjs-portal,
 [aria-label="Open Next.js Dev Tools"],
 [aria-label="Close Next.js Dev Tools"],
