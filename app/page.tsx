@@ -4,12 +4,15 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
-  BarChart3,
+  ArrowDown,
+  ArrowUp,
   CheckCircle2,
   ChevronDown,
+  ClipboardPaste,
   Download,
   Eraser,
   ImageDown,
+  ImagePlus,
   Home as HomeIcon,
   Lock,
   Minus,
@@ -20,7 +23,6 @@ import {
   RefreshCcw,
   Search,
   Settings,
-  Star,
   Truck,
   Upload,
   Volume2,
@@ -29,12 +31,11 @@ import {
   Wifi,
   X
 } from "lucide-react";
-import { startTransition, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type ReactNode } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   calculateCash,
   calculateCashColumns,
   calculateCashTotal,
-  calculateDashboard,
   calculateReportLines,
   calculateReportRevenue,
   canCloseReport,
@@ -46,6 +47,7 @@ import { applyCarryoverAfterClose } from "./lib/carryover";
 import { createExcelReportFile } from "./lib/excel";
 import { importExcelReport } from "./lib/excel-import";
 import { formatDecimal, parseDecimal, parseOptionalDecimal } from "./lib/numbers";
+import { productSortNumber } from "./lib/product-order";
 import { createEmptyReport, createInitialState, emptyCash, reportId } from "./lib/seed";
 import { loadState, saveState } from "./lib/storage";
 import type {
@@ -66,9 +68,17 @@ import type {
 
 type Tab = "home" | "inventory" | "receipts" | "transfers" | "finance" | "more";
 type CategoryId = "spirits" | "beer" | "wine" | "sparkling" | "premium";
-type InventoryView = "categories" | "quick" | "list";
+type InventoryView = "quick" | "list";
 type LineTone = "empty" | "done" | "warn";
 type ServerCheck = { status: "idle" | "checking" | "ok" | "error"; message: string };
+type ClipboardImageState = "idle" | "checking" | "found" | "empty" | "error";
+type PhotoTransform = { scale: number; x: number; y: number };
+type ReceiptCandidate = {
+  id: string;
+  rawText: string;
+  productId: string;
+  quantity: string;
+};
 
 const categoryDefs: Array<{
   id: CategoryId;
@@ -141,6 +151,8 @@ const todayIso = () => {
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
+
+const shortDate = (date: string) => date.split("-").reverse().join("/");
 
 const makeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const currency = (value: number) => `${value.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} AED`;
@@ -217,11 +229,12 @@ function productMatchesCategory(product: Product, categoryId: CategoryId) {
 }
 
 function allowsDecimalProduct(product: Product) {
-  return productMatchesCategory(product, "beer");
+  return Boolean(product.allowDecimal);
 }
 
 function quantityStep(product: Product | undefined) {
-  return product && allowsDecimalProduct(product) ? 0.5 : 1;
+  if (!product || !allowsDecimalProduct(product)) return 1;
+  return typeof product.quantityStep === "number" && product.quantityStep > 0 ? product.quantityStep : 0.5;
 }
 
 function normalizeQuantityInput(value: string, product: Product) {
@@ -235,7 +248,9 @@ function parseOptionalQuantity(value: string, product: Product) {
   if (normalized === "") return undefined;
   const parsed = parseOptionalNumber(normalized);
   if (typeof parsed !== "number") return undefined;
-  return Math.max(0, allowsDecimalProduct(product) ? parsed : Math.round(parsed));
+  if (!allowsDecimalProduct(product)) return Math.max(0, Math.round(parsed));
+  const step = quantityStep(product);
+  return Math.max(0, parseNumber(String(Math.round(parsed / step) * step)));
 }
 
 function parseQuantity(value: string, product: Product, fallback = 0) {
@@ -268,9 +283,8 @@ function ensureReport(state: AppState, date: string, pointId: string, driverId: 
 export default function Home() {
   const [state, setState] = useState<AppState>(() => createInitialState());
   const [hydrated, setHydrated] = useState(false);
-  const [activeTab, setActiveTab] = useState<Tab>("home");
-  const [inventoryView, setInventoryView] = useState<InventoryView>("categories");
-  const [selectedCategory, setSelectedCategory] = useState<CategoryId | null>(null);
+  const [activeTab, setActiveTab] = useState<Tab>("inventory");
+  const [inventoryView, setInventoryView] = useState<InventoryView>("quick");
   const [quickIndex, setQuickIndex] = useState(0);
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [selectedPointId, setSelectedPointId] = useState("jvc");
@@ -294,6 +308,15 @@ export default function Home() {
   const [importMode, setImportMode] = useState<ImportMode>("merge");
   const [serverCheck, setServerCheck] = useState<ServerCheck>({ status: "idle", message: "Проверка не запускалась" });
   const [uiSoundEnabled, setUiSoundEnabled] = useState(true);
+  const [reportPhotoUrl, setReportPhotoUrl] = useState("");
+  const [reportClipboardState, setReportClipboardState] = useState<ClipboardImageState>("idle");
+  const [reportClipboardBlob, setReportClipboardBlob] = useState<Blob | null>(null);
+  const [reportPhotoTransform, setReportPhotoTransform] = useState<PhotoTransform>({ scale: 1, x: 0, y: 0 });
+  const [receiptPhotoUrl, setReceiptPhotoUrl] = useState("");
+  const [receiptClipboardState, setReceiptClipboardState] = useState<ClipboardImageState>("idle");
+  const [receiptClipboardBlob, setReceiptClipboardBlob] = useState<Blob | null>(null);
+  const [receiptOcrBusy, setReceiptOcrBusy] = useState(false);
+  const [receiptCandidates, setReceiptCandidates] = useState<ReceiptCandidate[]>([]);
   const [transferForm, setTransferForm] = useState({
     fromPointId: "jvc",
     toPointId: "business-bay",
@@ -307,7 +330,18 @@ export default function Home() {
   const quickCommitTimerRef = useRef<number | undefined>(undefined);
   const pendingQuickCommitRef = useRef<{ productId: string; value: number | undefined } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const reportPhotoInputRef = useRef<HTMLInputElement>(null);
+  const receiptPhotoInputRef = useRef<HTMLInputElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const reportPhotoPointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const reportPhotoGestureRef = useRef<{
+    startDistance: number;
+    startScale: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
 
   useEffect(() => {
     const loaded = loadState();
@@ -343,6 +377,18 @@ export default function Home() {
   }, [preparedDownload]);
 
   useEffect(() => {
+    return () => {
+      if (reportPhotoUrl) URL.revokeObjectURL(reportPhotoUrl);
+    };
+  }, [reportPhotoUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (receiptPhotoUrl) URL.revokeObjectURL(receiptPhotoUrl);
+    };
+  }, [receiptPhotoUrl]);
+
+  useEffect(() => {
     if (!hydrated) return;
     setState((current) => ensureReport(current, selectedDate, selectedPointId, selectedDriverId));
   }, [hydrated, selectedDate, selectedPointId, selectedDriverId]);
@@ -352,6 +398,18 @@ export default function Home() {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "inventory" && inventoryView === "quick") {
+      checkClipboardForReportImage();
+    }
+  }, [activeTab, inventoryView]);
+
+  useEffect(() => {
+    if (activeTab === "receipts") {
+      checkClipboardForReceiptImage();
+    }
+  }, [activeTab]);
 
   const currentReport = useMemo(
     () => getReport(state, selectedDate, selectedPointId) ?? createEmptyReport(selectedDate, selectedPointId, selectedDriverId, state.products),
@@ -365,7 +423,6 @@ export default function Home() {
   );
   const cashColumns = useMemo(() => calculateCashColumns(currentReport), [currentReport]);
   const cashTotal = useMemo(() => calculateCashTotal(currentReport), [currentReport]);
-  const dashboardDaySales = useMemo(() => (activeTab === "home" ? calculateDashboard(state, selectedDate).daySales : 0), [activeTab, selectedDate, state]);
   const reportWarningList = useMemo(() => (activeTab === "more" ? getReportWarnings(state, currentReport) : []), [activeTab, currentReport, state]);
   const errorWarningCount = reportWarningList.filter((warning) => warning.severity === "error").length;
   const selectedPoint = state.points.find((point) => point.id === selectedPointId);
@@ -373,7 +430,6 @@ export default function Home() {
   const filledCount = inventoryLines.filter((line) => typeof line.homeRest === "number").length;
   const missingCount = Math.max(inventoryLines.length - filledCount, 0);
   const problemCount = countProblems(inventoryLines);
-  const progressPercent = inventoryLines.length ? Math.round((filledCount / inventoryLines.length) * 100) : 0;
   const visibleCashColumns = cashColumns.filter((cash) => cash.driverName || hasCashValues(cash));
   const cashColumnKeys = (visibleCashColumns.length ? visibleCashColumns : cashColumns.filter((cash) => cash.columnKey === "F")).map(
     (cash) => (cash.columnKey ?? "F") as CashColumnKey
@@ -396,25 +452,7 @@ export default function Home() {
     [inventoryLines]
   );
 
-  const categoryCards = useMemo(
-    () =>
-      categoryDefs.map((category) => {
-        const lines = inventoryLines.filter((line) => productMatchesCategory(line.product, category.id));
-        const filled = lines.filter((line) => typeof line.homeRest === "number").length;
-        return {
-          ...category,
-          total: lines.length,
-          filled,
-          missing: Math.max(lines.length - filled, 0)
-        };
-      }),
-    [inventoryLines]
-  );
-
-  const quickLines = useMemo(() => {
-    const lines = selectedCategory ? inventoryLines.filter((line) => productMatchesCategory(line.product, selectedCategory)) : inventoryLines;
-    return lines.length ? lines : inventoryLines;
-  }, [inventoryLines, selectedCategory]);
+  const quickLines = inventoryLines;
 
   const quickLine = quickLines[quickIndex] ?? null;
 
@@ -542,8 +580,9 @@ export default function Home() {
     const query = productAdminSearch.trim().toLowerCase();
     return state.products
       .filter((product) => !query || product.name.toLowerCase().includes(query) || product.id.includes(query))
+      .sort((a, b) => productSortNumber(a, selectedPointId) - productSortNumber(b, selectedPointId))
       .slice(0, 80);
-  }, [productAdminSearch, state.products]);
+  }, [productAdminSearch, selectedPointId, state.products]);
 
   useEffect(() => {
     const firstKey = cashColumnKeys[0] ?? "F";
@@ -558,10 +597,7 @@ export default function Home() {
 
   useEffect(() => {
     if (activeTab !== "inventory" || inventoryView !== "quick") return;
-    const id = window.setTimeout(() => {
-      quickInputRef.current?.focus();
-      quickInputRef.current?.select();
-    }, 20);
+    const id = window.setTimeout(() => quickInputRef.current?.blur(), 20);
     return () => window.clearTimeout(id);
   }, [activeTab, inventoryView, quickIndex, quickLine?.product.id]);
 
@@ -727,6 +763,265 @@ export default function Home() {
     oscillator.stop(context.currentTime + 0.05);
   }
 
+  async function readClipboardImage() {
+    const read = (navigator.clipboard as Clipboard & { read?: () => Promise<ClipboardItem[]> } | undefined)?.read;
+    if (!read) return null;
+    const items = await read.call(navigator.clipboard);
+    for (const item of items) {
+      const imageType = item.types.find((type) => type.startsWith("image/"));
+      if (imageType) return item.getType(imageType);
+    }
+    return null;
+  }
+
+  function setImageUrl(blob: Blob, setter: (url: string) => void, currentUrl: string) {
+    const nextUrl = URL.createObjectURL(blob);
+    if (currentUrl) URL.revokeObjectURL(currentUrl);
+    setter(nextUrl);
+  }
+
+  async function checkClipboardForReportImage() {
+    if (reportClipboardState === "checking") return;
+    setReportClipboardState("checking");
+    try {
+      const blob = await readClipboardImage();
+      setReportClipboardBlob(blob);
+      setReportClipboardState(blob ? "found" : "empty");
+    } catch {
+      setReportClipboardBlob(null);
+      setReportClipboardState("error");
+    }
+  }
+
+  async function checkClipboardForReceiptImage() {
+    if (receiptClipboardState === "checking") return;
+    setReceiptClipboardState("checking");
+    try {
+      const blob = await readClipboardImage();
+      setReceiptClipboardBlob(blob);
+      setReceiptClipboardState(blob ? "found" : "empty");
+    } catch {
+      setReceiptClipboardBlob(null);
+      setReceiptClipboardState("error");
+    }
+  }
+
+  function loadReportPhoto(file: File | Blob) {
+    setImageUrl(file, setReportPhotoUrl, reportPhotoUrl);
+    setReportPhotoTransform({ scale: 1, x: 0, y: 0 });
+    setNotice("Фото отчета добавлено.");
+  }
+
+  function loadReceiptPhoto(file: File | Blob) {
+    setImageUrl(file, setReceiptPhotoUrl, receiptPhotoUrl);
+    setReceiptCandidates([]);
+    setNotice("Фото чека добавлено. Запустите OCR и проверьте строки.");
+  }
+
+  function handleReportPhotoFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) loadReportPhoto(file);
+  }
+
+  function handleReceiptPhotoFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) loadReceiptPhoto(file);
+  }
+
+  function pasteReportPhoto() {
+    if (!reportClipboardBlob) return;
+    loadReportPhoto(reportClipboardBlob);
+    setReportClipboardBlob(null);
+    setReportClipboardState("idle");
+  }
+
+  function pasteReceiptPhoto() {
+    if (!receiptClipboardBlob) return;
+    loadReceiptPhoto(receiptClipboardBlob);
+    setReceiptClipboardBlob(null);
+    setReceiptClipboardState("idle");
+  }
+
+  function clampPhotoTransform(transform: PhotoTransform): PhotoTransform {
+    const scale = Math.min(Math.max(transform.scale, 1), 4);
+    return {
+      scale,
+      x: scale === 1 ? 0 : Math.min(Math.max(transform.x, -520), 520),
+      y: scale === 1 ? 0 : Math.min(Math.max(transform.y, -520), 520)
+    };
+  }
+
+  function handleReportPhotoPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!reportPhotoUrl) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    reportPhotoPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const points = Array.from(reportPhotoPointersRef.current.values());
+    if (points.length === 1) {
+      reportPhotoGestureRef.current = {
+        startDistance: 0,
+        startScale: reportPhotoTransform.scale,
+        startX: points[0].x,
+        startY: points[0].y,
+        originX: reportPhotoTransform.x,
+        originY: reportPhotoTransform.y
+      };
+    }
+    if (points.length === 2) {
+      const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+      reportPhotoGestureRef.current = {
+        startDistance: distance,
+        startScale: reportPhotoTransform.scale,
+        startX: 0,
+        startY: 0,
+        originX: reportPhotoTransform.x,
+        originY: reportPhotoTransform.y
+      };
+    }
+  }
+
+  function handleReportPhotoPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!reportPhotoPointersRef.current.has(event.pointerId) || !reportPhotoGestureRef.current) return;
+    reportPhotoPointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const points = Array.from(reportPhotoPointersRef.current.values());
+    const gesture = reportPhotoGestureRef.current;
+    if (points.length === 1) {
+      setReportPhotoTransform((current) =>
+        clampPhotoTransform({
+          ...current,
+          x: gesture.originX + points[0].x - gesture.startX,
+          y: gesture.originY + points[0].y - gesture.startY
+        })
+      );
+    }
+    if (points.length >= 2 && gesture.startDistance > 0) {
+      const distance = Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+      setReportPhotoTransform((current) =>
+        clampPhotoTransform({
+          ...current,
+          scale: gesture.startScale * (distance / gesture.startDistance)
+        })
+      );
+    }
+  }
+
+  function handleReportPhotoPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    reportPhotoPointersRef.current.delete(event.pointerId);
+    if (reportPhotoPointersRef.current.size === 0) reportPhotoGestureRef.current = null;
+  }
+
+  function toggleReportPhotoZoom() {
+    setReportPhotoTransform((current) => (current.scale > 1 ? { scale: 1, x: 0, y: 0 } : { scale: 2.4, x: 0, y: 0 }));
+  }
+
+  function normalizeReceiptText(value: string) {
+    return value.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, " ");
+  }
+
+  function matchReceiptProduct(rawText: string) {
+    const rawTokens = normalizeReceiptText(rawText).split(/\s+/).filter((token) => token.length > 1);
+    let best: { product: Product; score: number } | null = null;
+    for (const product of state.products.filter((item) => item.active)) {
+      const productTokens = normalizeReceiptText(product.name).split(/\s+/).filter((token) => token.length > 1);
+      const score = productTokens.reduce((total, token) => total + (rawTokens.some((raw) => raw.includes(token) || token.includes(raw)) ? 1 : 0), 0);
+      if (!best || score > best.score) best = { product, score };
+    }
+    return best && best.score >= 2 ? best.product : null;
+  }
+
+  function extractReceiptQuantity(rawText: string) {
+    const qtyMatch = rawText.match(/(?:qty|qnty|quantity|кол-?во|x)\s*[:x]?\s*(\d+(?:[.,]\d+)?)/i);
+    if (qtyMatch) return qtyMatch[1].replace(",", ".");
+    const numbers = rawText.match(/\d+(?:[.,]\d+)?/g) ?? [];
+    const plausible = numbers.map((value) => parseNumber(value)).filter((value) => value > 0 && value <= 500);
+    return plausible.length ? String(plausible[0]) : "1";
+  }
+
+  function buildReceiptCandidates(text: string): ReceiptCandidate[] {
+    return text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length >= 4 && /[a-zа-я]/i.test(line))
+      .slice(0, 40)
+      .map((line) => {
+        const product = matchReceiptProduct(line);
+        return {
+          id: makeId(),
+          rawText: line,
+          productId: product?.id ?? "",
+          quantity: extractReceiptQuantity(line)
+        };
+      });
+  }
+
+  async function runReceiptOcr() {
+    if (!receiptPhotoUrl || receiptOcrBusy) return;
+    setReceiptOcrBusy(true);
+    setNotice("OCR читает чек. После распознавания нужно проверить строки.");
+    try {
+      const tesseract = await import("tesseract.js");
+      const result = await tesseract.recognize(receiptPhotoUrl, "eng");
+      const candidates = buildReceiptCandidates(result.data.text);
+      setReceiptCandidates(candidates);
+      setNotice(candidates.length ? "OCR готов. Проверьте строки перед применением." : "OCR не нашел товарные строки. Попробуйте другое фото.");
+    } catch {
+      setNotice("OCR не запустился. Проверьте фото или подключение.");
+    } finally {
+      setReceiptOcrBusy(false);
+    }
+  }
+
+  function updateReceiptCandidate(id: string, patch: Partial<ReceiptCandidate>) {
+    setReceiptCandidates((current) => current.map((candidate) => (candidate.id === id ? { ...candidate, ...patch } : candidate)));
+  }
+
+  function applyReceiptCandidates() {
+    const activeCandidates = receiptCandidates.filter((candidate) => candidate.productId !== "__skip__");
+    if (!canEditReport || activeCandidates.length === 0) return;
+
+    setState((current) => {
+      const existing = getReport(current, selectedDate, selectedPointId) ?? createEmptyReport(selectedDate, selectedPointId, selectedDriverId, current.products);
+      if (existing.closed) return current;
+      const activePointIds = current.points.filter((point) => point.active).map((point) => point.id);
+      const nextProducts = [...current.products];
+      const nextItems = { ...existing.items };
+
+      for (const candidate of activeCandidates) {
+        const quantity = Math.max(0, parseNumber(candidate.quantity));
+        if (!quantity) continue;
+        let productId = candidate.productId;
+        let product = nextProducts.find((item) => item.id === productId);
+        if (productId === "__new__" || !product) {
+          productId = nextUniqueId(nextProducts, slugify(candidate.rawText));
+          product = {
+            id: productId,
+            name: candidate.rawText,
+            price: 0,
+            norm: 0,
+            category: "Напитки",
+            active: true,
+            shelfOrder: Math.max(0, ...nextProducts.map((item) => item.shelfOrder ?? 0)) + 1,
+            allowDecimal: false,
+            quantityStep: 1,
+            pointIds: activePointIds
+          };
+          nextProducts.push(product);
+        }
+        const currentItem = nextItems[productId] ?? { productId, incoming: 0 };
+        nextItems[productId] = {
+          ...currentItem,
+          productId,
+          incoming: parseQuantity(String((currentItem.incoming ?? 0) + quantity), product)
+        };
+      }
+
+      return replaceReport({ ...current, products: nextProducts }, { ...existing, items: nextItems });
+    });
+    setReceiptCandidates([]);
+    setNotice("Приход применен после проверки.");
+  }
+
   function toggleBulkProduct(productId: string) {
     setBulkSelectedIds((current) =>
       current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId]
@@ -834,47 +1129,71 @@ export default function Home() {
       return;
     }
 
-    const rowHeight = 54;
+    const problemLines = discrepancyLines.filter((line) => {
+      const item = currentReport.items[line.product.id];
+      const driverRest = item?.driverRest;
+      const driverSale = item?.driverSale;
+      const restGap = typeof driverRest === "number" && typeof line.homeRest === "number" ? driverRest - line.homeRest : 0;
+      const saleGap = typeof driverSale === "number" ? driverSale - line.sale : 0;
+      return restGap !== 0 || saleGap !== 0 || line.warnings.some((warning) => warning.severity !== "info");
+    });
+
+    if (problemLines.length === 0) {
+      setNotice("Нет проблемных позиций для PNG отчета.");
+      return;
+    }
+
+    const rowHeight = 178;
     const width = 1280;
-    const height = 210 + discrepancyLines.length * rowHeight;
+    const height = 210 + problemLines.length * rowHeight;
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) return;
 
-    context.fillStyle = "#10130e";
+    context.fillStyle = "#0f1115";
     context.fillRect(0, 0, width, height);
     context.fillStyle = "#55d3c1";
-    context.font = "700 36px Arial";
-    context.fillText("Отчет по расхождениям", 48, 62);
-    context.fillStyle = "#f5f1e8";
+    context.font = "800 38px Arial";
+    context.fillText("ОТЧЕТ ПО РАСХОЖДЕНИЯМ", 48, 66);
+    context.fillStyle = "#f5f7fb";
     context.font = "600 22px Arial";
-    context.fillText(`${selectedPoint?.name ?? selectedPointId} · ${selectedDate}`, 48, 100);
-    context.fillStyle = "#9f9888";
-    context.font = "600 18px Arial";
-    context.fillText("Товар", 48, 158);
-    context.fillText("Приложение", 630, 158);
-    context.fillText("Водитель", 820, 158);
-    context.fillText("Разница", 1030, 158);
+    context.fillText(`${selectedPoint?.name ?? selectedPointId} · ${shortDate(selectedDate)}`, 48, 104);
 
-    discrepancyLines.forEach((line, index) => {
+    problemLines.forEach((line, index) => {
       const item = currentReport.items[line.product.id];
-      const y = 188 + index * rowHeight;
+      const y = 176 + index * rowHeight;
       const driverRest = item?.driverRest;
       const driverSale = item?.driverSale;
-      const restGap = typeof driverRest === "number" && typeof line.homeRest === "number" ? line.homeRest - driverRest : 0;
-      const saleGap = typeof driverSale === "number" ? line.sale - driverSale : 0;
-      context.fillStyle = index % 2 ? "#171912" : "#1c1d18";
-      context.fillRect(36, y - 28, width - 72, rowHeight - 6);
-      context.fillStyle = "#f5f1e8";
-      context.font = "600 18px Arial";
-      context.fillText(`${line.rowNumber}. ${line.product.name}`.slice(0, 58), 48, y);
-      context.fillStyle = "#d7d0bf";
-      context.fillText(`Ост. ${num(line.homeRest)} · Прод. ${num(line.sale)}`, 630, y);
-      context.fillText(`Ост. ${num(driverRest)} · Прод. ${num(driverSale)}`, 820, y);
-      context.fillStyle = restGap || saleGap ? "#ffb84d" : "#47c68a";
-      context.fillText(`Ост. ${num(restGap)} · Прод. ${num(saleGap)}`, 1030, y);
+      const restGap = typeof driverRest === "number" && typeof line.homeRest === "number" ? driverRest - line.homeRest : 0;
+      const saleGap = typeof driverSale === "number" ? driverSale - line.sale : 0;
+
+      context.fillStyle = index % 2 ? "#151922" : "#1b2028";
+      context.fillRect(36, y - 32, width - 72, rowHeight - 18);
+      context.fillStyle = "#ff6b6b";
+      context.beginPath();
+      context.arc(58, y, 9, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = "#f5f7fb";
+      context.font = "800 22px Arial";
+      context.fillText(`${line.rowNumber}. ${line.product.name}`.slice(0, 72), 78, y + 7);
+
+      context.fillStyle = "#8f97a3";
+      context.font = "700 18px Arial";
+      context.fillText("Система", 78, y + 52);
+      context.fillText("Водитель", 410, y + 52);
+      context.fillText("Разница", 742, y + 52);
+
+      context.fillStyle = "#d6dbe4";
+      context.font = "600 20px Arial";
+      context.fillText(`Остаток ${num(line.homeRest)}`, 78, y + 86);
+      context.fillText(`Продажа ${num(line.sale)}`, 78, y + 118);
+      context.fillText(`Остаток ${num(driverRest)}`, 410, y + 86);
+      context.fillText(`Продажа ${num(driverSale)}`, 410, y + 118);
+      context.fillStyle = restGap || saleGap ? "#f0b84d" : "#55d3c1";
+      context.fillText(`Остаток ${restGap > 0 ? "+" : ""}${num(restGap)}`, 742, y + 86);
+      context.fillText(`Продажа ${saleGap > 0 ? "+" : ""}${num(saleGap)}`, 742, y + 118);
     });
 
     try {
@@ -1014,7 +1333,11 @@ export default function Home() {
       price: parseNumber(newProduct.price),
       norm: parseNumber(newProduct.norm),
       category: newProduct.category.trim() || "Напитки",
-      active: true
+      active: true,
+      shelfOrder: Math.max(0, ...state.products.map((item) => item.shelfOrder ?? 0)) + 1,
+      allowDecimal: false,
+      quantityStep: 1,
+      pointIds: state.points.filter((point) => point.active).map((point) => point.id)
     };
     setState((current) => ({ ...current, products: [...current.products, product] }));
     setNewProduct({ name: "", price: "", norm: "", category: "Напитки" });
@@ -1041,7 +1364,6 @@ export default function Home() {
     const driver = state.drivers.find((item) => item.pointId === pointId && item.active);
     setSelectedPointId(pointId);
     setSelectedDriverId(driver?.id ?? selectedDriverId);
-    setSelectedCategory(null);
     setQuickIndex(0);
     setTransferForm((current) => ({
       ...current,
@@ -1050,12 +1372,10 @@ export default function Home() {
     }));
   }
 
-  function startQuick(productId?: string, categoryId?: CategoryId | null) {
-    const category = categoryId === undefined ? selectedCategory : categoryId;
-    const lines = category ? inventoryLines.filter((line) => productMatchesCategory(line.product, category)) : inventoryLines;
+  function startQuick(productId?: string) {
+    const lines = inventoryLines;
     const fallbackIndex = lines.findIndex((line) => typeof line.homeRest !== "number");
     const productIndex = productId ? lines.findIndex((line) => line.product.id === productId) : -1;
-    setSelectedCategory(category ?? null);
     setQuickIndex(productIndex >= 0 ? productIndex : Math.max(fallbackIndex, 0));
     setInventoryView("quick");
     setActiveTab("inventory");
@@ -1066,7 +1386,7 @@ export default function Home() {
       setActiveTab("more");
       return;
     }
-    startQuick(undefined, null);
+    startQuick();
   }
 
   function saveQuickValue(value: string, input?: HTMLInputElement) {
@@ -1088,6 +1408,57 @@ export default function Home() {
     if (quickInputRef.current) quickInputRef.current.value = formatted;
     setQuickPreviewRest(next);
     scheduleQuickCommit(quickLine.product.id, next);
+  }
+
+  function moveProductShelf(productId: string, direction: -1 | 1) {
+    setState((current) => {
+      const ordered = [...current.products].sort((a, b) => productSortNumber(a, selectedPointId) - productSortNumber(b, selectedPointId));
+      const index = ordered.findIndex((product) => product.id === productId);
+      const targetIndex = index + direction;
+      if (index < 0 || targetIndex < 0 || targetIndex >= ordered.length) return current;
+      const reordered = [...ordered];
+      [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+      const shelfOrderById = new Map(reordered.map((product, orderIndex) => [product.id, orderIndex + 1]));
+      return {
+        ...current,
+        products: current.products.map((product) => ({
+          ...product,
+          shelfOrder: shelfOrderById.get(product.id) ?? product.shelfOrder
+        }))
+      };
+    });
+  }
+
+  function setQuickDraftValue(value: string) {
+    if (!quickLine || !canEditReport) return;
+    const normalized = normalizeQuantityInput(value, quickLine.product);
+    const parsed = parseOptionalQuantity(normalized, quickLine.product);
+    quickDraftRef.current = normalized;
+    if (quickInputRef.current) quickInputRef.current.value = normalized;
+    setQuickPreviewRest(parsed);
+    scheduleQuickCommit(quickLine.product.id, parsed);
+  }
+
+  function pressQuickKey(key: string) {
+    if (!quickLine || !canEditReport) return;
+    if (key === "backspace") {
+      setQuickDraftValue(quickDraftRef.current.slice(0, -1));
+      return;
+    }
+    if (key === "." && (!allowsDecimalProduct(quickLine.product) || quickDraftRef.current.includes("."))) return;
+    setQuickDraftValue(`${quickDraftRef.current}${key}`);
+  }
+
+  function keepPreviousAndNext() {
+    if (!quickLine || !canEditReport) return;
+    const value = parseQuantity(String(quickLine.previousRest), quickLine.product);
+    const formatted = formatQuantity(value, quickLine.product);
+    quickDraftRef.current = formatted;
+    if (quickInputRef.current) quickInputRef.current.value = formatted;
+    setQuickPreviewRest(value);
+    pendingQuickCommitRef.current = { productId: quickLine.product.id, value };
+    flushQuickCommit();
+    goNext();
   }
 
   function adjustIncoming(productId: string, direction: -1 | 1) {
@@ -1118,8 +1489,8 @@ export default function Home() {
       setQuickIndex((current) => current + 1);
       return;
     }
-    setInventoryView("categories");
-    setNotice("Категория заполнена. Можно перейти к следующей.");
+    setInventoryView("list");
+    setNotice("Инвентаризация заполнена.");
   }
 
   function goPrev() {
@@ -1207,37 +1578,34 @@ export default function Home() {
     quickLine && typeof quickPreviewRest === "number" ? parseNumber(String(quickLine.available - quickPreviewRest)) : undefined;
   const quickPreviewAmount =
     quickLine && typeof quickPreviewSale === "number" ? parseNumber(String(quickPreviewSale * quickLine.product.price)) : undefined;
+  const isFocusMode = activeTab === "inventory" && inventoryView === "quick";
 
   return (
-    <main className="app-shell">
-      <header className="app-header">
-        <div>
-          <span className="overline">Ежедневное закрытие</span>
-          <h1>{selectedPoint?.name ?? "Точка"}</h1>
-        </div>
-        <input
-          className="date-control"
-          type="date"
-          value={selectedDate}
-          onChange={(event) => setSelectedDate(event.target.value)}
-          aria-label="Дата"
-        />
-      </header>
-
-      <section className="point-strip" aria-label="Точки">
-        {state.points
-          .filter((point) => point.active)
-          .map((point) => (
-            <button
-              type="button"
-              key={point.id}
-              className={point.id === selectedPointId ? "active" : ""}
-              onClick={() => selectPoint(point.id)}
-            >
-              {point.name}
-            </button>
-          ))}
-      </section>
+    <main className={isFocusMode ? "app-shell focus-mode" : "app-shell"}>
+      {!isFocusMode && (
+        <header className="app-header">
+          <label className="point-select">
+            <select value={selectedPointId} onChange={(event) => selectPoint(event.target.value)} aria-label="Точка">
+              {state.points.filter((point) => point.active).map((point) => (
+                <option key={point.id} value={point.id}>
+                  {point.name}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={16} />
+          </label>
+          <label className="date-pill">
+            <span>{shortDate(selectedDate)}</span>
+            <input
+              className="date-control"
+              type="date"
+              value={selectedDate}
+              onChange={(event) => setSelectedDate(event.target.value)}
+              aria-label="Дата"
+            />
+          </label>
+        </header>
+      )}
 
       {notice && (
         <section className="notice">
@@ -1257,120 +1625,36 @@ export default function Home() {
         <section className="screen home-screen">
           <button type="button" className="hero-progress" onClick={() => setProgressOpen(true)}>
             <div>
-              <span className="overline">Заполнено</span>
+              <span className="overline">{shortDate(selectedDate)}</span>
               <strong>
                 {filledCount} / {inventoryLines.length}
               </strong>
             </div>
-            <div className="progress-ring" style={{ "--progress": `${progressPercent}%` } as CSSProperties}>
-              <span>{progressPercent}%</span>
-            </div>
+            <Package size={28} />
           </button>
 
           <div className="home-metrics">
-            <Metric label="Осталось" value={`${missingCount} товаров`} tone={missingCount ? "warn" : "good"} />
+            <Metric label="Осталось" value={`${missingCount} товаров`} tone={missingCount ? "warn" : "neutral"} />
             <Metric label="Выручка" value={currency(revenue)} tone="neutral" />
-            <Metric label="Сдали" value={currency(cashTotal.handedOver)} tone="neutral" />
             <Metric label="Недостача" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
           </div>
 
-          <button type="button" className="primary-cta" onClick={continueFill}>
+          <button
+            type="button"
+            className="primary-cta icon-cta"
+            onClick={continueFill}
+            aria-label={missingCount === 0 ? "Открыть закрытие дня" : "Продолжить заполнение"}
+            title={missingCount === 0 ? "Открыть закрытие дня" : "Продолжить"}
+          >
             {missingCount === 0 ? <CheckCircle2 size={20} /> : <ArrowRight size={20} />}
-            {missingCount === 0 ? "Открыть закрытие дня" : "Продолжить заполнение"}
           </button>
-
-          <div className="quiet-panel">
-            <div>
-              <span className="overline">Сегодня все точки</span>
-              <strong>{currency(dashboardDaySales)}</strong>
-            </div>
-            <BarChart3 size={22} />
-          </div>
         </section>
       )}
 
       {activeTab === "inventory" && (
         <section className="screen inventory-screen">
-          {inventoryView === "categories" && (
-            <>
-              <div className="screen-head">
-                <div>
-                  <span className="overline">Инвентаризация</span>
-                  <h2>Выберите категорию</h2>
-                </div>
-              </div>
-
-              <div className="view-switch" aria-label="Вид инвентаризации">
-                <button type="button" className="active" onClick={() => setInventoryView("categories")}>
-                  Категории
-                </button>
-                <button type="button" onClick={() => setInventoryView("list")}>
-                  Список
-                </button>
-              </div>
-
-              <label className="search-field">
-                <Search size={18} />
-                <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Поиск товара"
-                  aria-label="Поиск товара"
-                />
-              </label>
-
-              {search ? (
-                <div className="search-results">
-                  {searchResults.map((line) => (
-                    <ProductPickButton key={line.product.id} line={line} onClick={() => startQuick(line.product.id, null)} />
-                  ))}
-                  {searchResults.length === 0 && <div className="empty-state">Ничего не найдено</div>}
-                </div>
-              ) : (
-                <>
-                  <div className="favorite-row" aria-label="Избранные товары">
-                    {favoriteLines.map((line) => (
-                      <button type="button" key={line.product.id} onClick={() => startQuick(line.product.id, null)}>
-                        <Star size={14} />
-                        <span>{line.product.name.replace(/\s+(LTR|1 LTR|75CL|33CL|BTL|CANS?).*$/i, "")}</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="category-grid">
-                    {categoryCards.map((category) => (
-                      <button type="button" className="category-card" key={category.id} onClick={() => startQuick(undefined, category.id)}>
-                        <span className="category-icon">{category.icon}</span>
-                        <span className="category-title">{category.title}</span>
-                        <span className={category.missing ? "category-status warn" : "category-status done"}>
-                          {category.filled} / {category.total}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </>
-          )}
-
           {inventoryView === "list" && (
             <>
-              <div className="screen-head">
-                <div>
-                  <span className="overline">Инвентаризация</span>
-                  <h2>Все товары</h2>
-                </div>
-              </div>
-
-              <div className="view-switch" aria-label="Вид инвентаризации">
-                <button type="button" onClick={() => setInventoryView("categories")}>
-                  Категории
-                </button>
-                <button type="button" className="active" onClick={() => setInventoryView("list")}>
-                  Список
-                </button>
-              </div>
-
               <label className="search-field">
                 <Search size={18} />
                 <input
@@ -1381,11 +1665,12 @@ export default function Home() {
                 />
               </label>
 
-              <div className="bulk-panel">
-                <div className="panel-title">
-                  <strong>Массовое заполнение</strong>
-                  <span>{bulkSelectedIds.length}</span>
-                </div>
+              <details className="bulk-panel">
+                <summary>
+                  <span>Массово</span>
+                  <strong>{bulkSelectedIds.length}</strong>
+                  <ChevronDown size={16} />
+                </summary>
                 <div className="bulk-controls">
                   <input
                     inputMode="decimal"
@@ -1394,17 +1679,31 @@ export default function Home() {
                     placeholder="Одинаковый остаток"
                     disabled={!canEditReport}
                   />
-                  <button type="button" className="secondary-action" onClick={selectVisibleBulkProducts} disabled={!canEditReport}>
-                    Выбрать видимые
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={selectVisibleBulkProducts}
+                    disabled={!canEditReport}
+                    aria-label="Выбрать видимые"
+                    title="Выбрать видимые"
+                  >
+                    <CheckCircle2 size={18} />
                   </button>
-                  <button type="button" className="secondary-action" onClick={() => setBulkSelectedIds([])}>
-                    Очистить
+                  <button type="button" className="secondary-action" onClick={() => setBulkSelectedIds([])} aria-label="Очистить" title="Очистить">
+                    <X size={18} />
                   </button>
-                  <button type="button" className="primary-action" onClick={applyBulkRest} disabled={!canEditReport || bulkSelectedIds.length === 0}>
-                    Применить
+                  <button
+                    type="button"
+                    className="primary-action"
+                    onClick={applyBulkRest}
+                    disabled={!canEditReport || bulkSelectedIds.length === 0}
+                    aria-label="Применить"
+                    title="Применить"
+                  >
+                    <ArrowRight size={18} />
                   </button>
                 </div>
-              </div>
+              </details>
 
               <div className="inventory-list">
                 {visibleInventoryLines.map((line) => (
@@ -1416,7 +1715,7 @@ export default function Home() {
                         onClick={() => toggleBulkProduct(line.product.id)}
                         aria-label="Выбрать товар"
                       />
-                      <button type="button" onClick={() => startQuick(line.product.id, null)}>
+                      <button type="button" onClick={() => startQuick(line.product.id)}>
                         <span className={`dot ${lineTone(line)}`} />
                         <strong>{line.rowNumber}. {line.product.name}</strong>
                       </button>
@@ -1435,63 +1734,79 @@ export default function Home() {
           {inventoryView === "quick" && (
             <div className="quick-fill">
               <div className="quick-top">
-                <button type="button" className="ghost-button" onClick={() => setInventoryView("categories")}>
+                <button type="button" className="icon-button" onClick={() => setInventoryView("list")} aria-label="Вернуться к списку">
                   <ArrowLeft size={18} />
-                  Категории
                 </button>
-                <span>
-                  Товар {quickIndex + 1} из {quickLines.length}
+                <span className="quick-counter">
+                  {quickIndex + 1} / {quickLines.length}
                 </span>
+              </div>
+
+              <input ref={reportPhotoInputRef} className="hidden-file-input" type="file" accept="image/*" onChange={handleReportPhotoFile} />
+
+              <div className="report-photo-panel">
+                <div
+                  className={reportPhotoUrl ? "photo-viewer has-photo" : "photo-viewer"}
+                  onPointerDown={handleReportPhotoPointerDown}
+                  onPointerMove={handleReportPhotoPointerMove}
+                  onPointerUp={handleReportPhotoPointerUp}
+                  onPointerCancel={handleReportPhotoPointerUp}
+                  onDoubleClick={toggleReportPhotoZoom}
+                >
+                  {reportPhotoUrl ? (
+                    <img
+                      src={reportPhotoUrl}
+                      alt="Фото отчета"
+                      style={{
+                        transform: `translate3d(${reportPhotoTransform.x}px, ${reportPhotoTransform.y}px, 0) scale(${reportPhotoTransform.scale})`
+                      }}
+                    />
+                  ) : (
+                    <div className="photo-empty">
+                      <ImagePlus size={24} />
+                      <span>Фото отчета</span>
+                    </div>
+                  )}
+                </div>
+                <div className="photo-actions">
+                  <button type="button" onClick={() => reportPhotoInputRef.current?.click()} aria-label="Галерея" title="Галерея">
+                    <ImagePlus size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={reportClipboardState === "found" ? pasteReportPhoto : checkClipboardForReportImage}
+                    aria-label="Вставить из буфера"
+                    title="Вставить из буфера"
+                  >
+                    <ClipboardPaste size={18} />
+                  </button>
+                  {reportClipboardState === "found" && <span>Найдено изображение в буфере</span>}
+                </div>
               </div>
 
               {quickLine && (
                 <>
                   <div className={`quick-product ${quickTone}`}>
-                    <div className="status-line">
-                      <span className={`dot ${quickTone}`} />
-                      {lineStatusText(quickLine)}
-                    </div>
+                    <strong className="quick-row-number">{quickLine.rowNumber}</strong>
                     <h2>{quickLine.product.name}</h2>
                     <div className="quick-facts">
                       <div>
                         <span>Было</span>
                         <strong>{num(quickLine.previousRest)}</strong>
                       </div>
-                      <div>
-                        <span>Доступно</span>
-                        <strong>{num(quickLine.available)}</strong>
-                      </div>
-                      <div>
-                        <span>Цена</span>
-                        <strong>{currency(quickLine.product.price)}</strong>
-                      </div>
                     </div>
                   </div>
 
                   <label className="rest-input">
-                    <span>Введите остаток</span>
-                    <div className="rest-stepper">
-                      <button
-                        type="button"
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          adjustQuickRest(-1);
-                        }}
-                        onClick={(event) => {
-                          if (event.detail === 0) adjustQuickRest(-1);
-                        }}
-                        disabled={!canEditReport}
-                        aria-label="Уменьшить остаток"
-                      >
-                        <Minus size={20} />
-                      </button>
+                    <span>Остаток</span>
+                    <div className="rest-stepper solo">
                       <input
                         key={quickLine.product.id}
                         ref={quickInputRef}
                         inputMode={quickLine && allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
                         type="text"
+                        readOnly
                         defaultValue={formatQuantity(quickLine.homeRest, quickLine.product)}
-                        onChange={(event) => saveQuickValue(event.currentTarget.value, event.currentTarget)}
                         onBlur={flushQuickCommit}
                         onKeyDown={(event) => {
                           if (event.key === "Enter") {
@@ -1510,90 +1825,114 @@ export default function Home() {
                         disabled={!canEditReport}
                         aria-label="Остаток товара"
                       />
-                      <button
-                        type="button"
-                        onPointerDown={(event) => {
-                          event.preventDefault();
-                          adjustQuickRest(1);
-                        }}
-                        onClick={(event) => {
-                          if (event.detail === 0) adjustQuickRest(1);
-                        }}
-                        disabled={!canEditReport}
-                        aria-label="Увеличить остаток"
-                      >
-                        <Plus size={20} />
-                      </button>
                     </div>
                   </label>
 
-                  <div className="auto-calc">
-                    <div>
-                      <span>Продано</span>
-                      <strong>{typeof quickPreviewSale === "number" ? num(quickPreviewSale) : "—"}</strong>
-                    </div>
-                    <div>
-                      <span>Сумма</span>
-                      <strong>{typeof quickPreviewAmount === "number" ? currency(quickPreviewAmount) : "—"}</strong>
-                    </div>
+                  <div className="number-pad" aria-label="Цифровая клавиатура">
+                    {["7", "8", "9", "4", "5", "6", "1", "2", "3", "0", ".", "backspace"].map((key) => (
+                      <button
+                        type="button"
+                        key={key}
+                        onPointerDown={(event) => event.preventDefault()}
+                        onClick={() => pressQuickKey(key)}
+                        disabled={!canEditReport || (key === "." && !allowsDecimalProduct(quickLine.product))}
+                        aria-label={key === "backspace" ? "Удалить цифру" : key}
+                      >
+                        {key === "backspace" ? "⌫" : key}
+                      </button>
+                    ))}
                   </div>
 
-                  <div className={quickItem?.flagged ? "discrepancy-card active" : "discrepancy-card"}>
-                    <button
-                      type="button"
-                      className="secondary-wide"
-                      onPointerDown={(event) => event.preventDefault()}
-                      onClick={() => updateDiscrepancy(quickLine.product.id, { flagged: !quickItem?.flagged })}
-                      disabled={!canEditReport}
-                    >
-                      <AlertTriangle size={17} />
-                      {quickItem?.flagged ? "Расхождение отмечено" : "Отметить расхождение"}
-                    </button>
-                    {quickItem?.flagged && (
-                      <div className="discrepancy-fields">
-                        <label>
-                          Остаток у водителя
-                          <input
-                            inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
-                            value={formatQuantity(quickItem.driverRest, quickLine.product)}
-                            onChange={(event) =>
-                              updateDiscrepancy(quickLine.product.id, {
-                                driverRest: parseOptionalQuantity(event.target.value, quickLine.product)
-                              })
-                            }
-                            disabled={!canEditReport}
-                          />
-                        </label>
-                        <label>
-                          Продажа у водителя
-                          <input
-                            inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
-                            value={formatQuantity(quickItem.driverSale, quickLine.product)}
-                            onChange={(event) =>
-                              updateDiscrepancy(quickLine.product.id, {
-                                driverSale: parseOptionalQuantity(event.target.value, quickLine.product)
-                              })
-                            }
-                            disabled={!canEditReport}
-                          />
-                        </label>
+                  <details className="quick-extra">
+                    <summary>
+                      Подробнее
+                      <ChevronDown size={16} />
+                    </summary>
+                    <div className="auto-calc">
+                      <div>
+                        <span>Продано</span>
+                        <strong>{typeof quickPreviewSale === "number" ? num(quickPreviewSale) : "—"}</strong>
+                      </div>
+                      <div>
+                        <span>Сумма</span>
+                        <strong>{typeof quickPreviewAmount === "number" ? currency(quickPreviewAmount) : "—"}</strong>
+                      </div>
+                    </div>
+
+                    <div className={quickItem?.flagged ? "discrepancy-card active" : "discrepancy-card"}>
+                      <button
+                        type="button"
+                        className="secondary-wide"
+                        onPointerDown={(event) => event.preventDefault()}
+                        onClick={() => updateDiscrepancy(quickLine.product.id, { flagged: !quickItem?.flagged })}
+                        disabled={!canEditReport}
+                      >
+                        <AlertTriangle size={17} />
+                        {quickItem?.flagged ? "Расхождение отмечено" : "Отметить расхождение"}
+                      </button>
+                      {quickItem?.flagged && (
+                        <div className="discrepancy-fields">
+                          <label>
+                            Остаток у водителя
+                            <input
+                              inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
+                              value={formatQuantity(quickItem.driverRest, quickLine.product)}
+                              onChange={(event) =>
+                                updateDiscrepancy(quickLine.product.id, {
+                                  driverRest: parseOptionalQuantity(event.target.value, quickLine.product)
+                                })
+                              }
+                              disabled={!canEditReport}
+                            />
+                          </label>
+                          <label>
+                            Продажа у водителя
+                            <input
+                              inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
+                              value={formatQuantity(quickItem.driverSale, quickLine.product)}
+                              onChange={(event) =>
+                                updateDiscrepancy(quickLine.product.id, {
+                                  driverSale: parseOptionalQuantity(event.target.value, quickLine.product)
+                                })
+                              }
+                              disabled={!canEditReport}
+                            />
+                          </label>
+                        </div>
+                      )}
+                    </div>
+
+                    {quickTone === "warn" && (
+                      <div className="warning-note">
+                        <AlertTriangle size={18} />
+                        Проверьте данные
                       </div>
                     )}
-                  </div>
-
-                  {quickTone === "warn" && (
-                    <div className="warning-note">
-                      <AlertTriangle size={18} />
-                      Проверьте данные
-                    </div>
-                  )}
+                  </details>
 
                   <div className="quick-actions">
                     <button type="button" className="secondary-action" onClick={goPrev} disabled={quickIndex === 0}>
                       <ArrowLeft size={18} />
                     </button>
-                    <button type="button" className="primary-action" onPointerDown={(event) => event.preventDefault()} onClick={goNext}>
-                      Следующий
+                    <button
+                      type="button"
+                      className="secondary-action"
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={keepPreviousAndNext}
+                      disabled={!canEditReport}
+                      aria-label="Без изменений"
+                      title="Без изменений"
+                    >
+                      <CheckCircle2 size={20} />
+                    </button>
+                    <button
+                      type="button"
+                      className="primary-action"
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={goNext}
+                      aria-label="Следующий товар"
+                      title="Следующий"
+                    >
                       <ArrowRight size={18} />
                     </button>
                   </div>
@@ -1606,14 +1945,6 @@ export default function Home() {
 
       {activeTab === "transfers" && (
         <section className="screen transfer-screen">
-          <div className="screen-head">
-            <div>
-              <span className="overline">Перемещения</span>
-              <h2>Отдельно от продаж</h2>
-            </div>
-            <Truck size={22} />
-          </div>
-
           <div className="transfer-card">
             <label className="search-field compact">
               <Search size={17} />
@@ -1705,9 +2036,8 @@ export default function Home() {
               </label>
             </div>
 
-            <button type="button" className="primary-cta" onClick={addTransfer} disabled={!canEditReport}>
+            <button type="button" className="primary-cta icon-cta" onClick={addTransfer} disabled={!canEditReport} aria-label="Переместить" title="Переместить">
               <Truck size={20} />
-              Переместить
             </button>
           </div>
 
@@ -1736,18 +2066,70 @@ export default function Home() {
 
       {activeTab === "receipts" && (
         <section className="screen receipts-screen">
-          <div className="screen-head">
-            <div>
-              <span className="overline">Приходы</span>
-              <h2>Поступления товара</h2>
+          <input ref={receiptPhotoInputRef} className="hidden-file-input" type="file" accept="image/*" onChange={handleReceiptPhotoFile} />
+          <div className="receipt-import-panel">
+            <div className={receiptPhotoUrl ? "receipt-photo-preview has-photo" : "receipt-photo-preview"}>
+              {receiptPhotoUrl ? (
+                <img src={receiptPhotoUrl} alt="Фото чека" />
+              ) : (
+                <div className="photo-empty">
+                  <ImagePlus size={22} />
+                  <span>Фото чека</span>
+                </div>
+              )}
             </div>
-            <PackagePlus size={22} />
+            <div className="photo-actions">
+              <button type="button" onClick={() => receiptPhotoInputRef.current?.click()} aria-label="Галерея" title="Галерея">
+                <ImagePlus size={18} />
+              </button>
+              <button
+                type="button"
+                onClick={receiptClipboardState === "found" ? pasteReceiptPhoto : checkClipboardForReceiptImage}
+                aria-label="Вставить из буфера"
+                title="Вставить из буфера"
+              >
+                <ClipboardPaste size={18} />
+              </button>
+              <button type="button" onClick={runReceiptOcr} disabled={!receiptPhotoUrl || receiptOcrBusy} aria-label="OCR" title="OCR">
+                <Search size={18} />
+              </button>
+              {receiptClipboardState === "found" && <span>Найдено изображение в буфере</span>}
+            </div>
           </div>
 
-          <div className="receipt-summary">
-            <Metric label="Позиций с приходом" value={`${inventoryLines.filter((line) => line.incoming > 0).length}`} tone="neutral" />
-            <Metric label="Всего единиц" value={num(inventoryLines.reduce((total, line) => total + line.incoming, 0))} tone="good" />
-          </div>
+          {receiptCandidates.length > 0 && (
+            <div className="receipt-review">
+              {receiptCandidates.map((candidate) => (
+                <div className="receipt-review-row" key={candidate.id}>
+                  <strong>{candidate.rawText}</strong>
+                  <label>
+                    Товар
+                    <select value={candidate.productId} onChange={(event) => updateReceiptCandidate(candidate.id, { productId: event.target.value })}>
+                      <option value="">Выбрать товар вручную</option>
+                      {state.products.filter((product) => product.active).map((product) => (
+                        <option key={product.id} value={product.id}>
+                          {product.name}
+                        </option>
+                      ))}
+                      <option value="__new__">Создать новый товар</option>
+                      <option value="__skip__">Пропустить</option>
+                    </select>
+                  </label>
+                  <label>
+                    Количество
+                    <input
+                      inputMode="decimal"
+                      value={candidate.quantity}
+                      onChange={(event) => updateReceiptCandidate(candidate.id, { quantity: event.target.value })}
+                    />
+                  </label>
+                </div>
+              ))}
+              <button type="button" className="primary-action" onClick={applyReceiptCandidates} disabled={!canEditReport}>
+                <CheckCircle2 size={18} />
+              </button>
+            </div>
+          )}
 
           <label className="search-field">
             <Search size={18} />
@@ -1764,7 +2146,7 @@ export default function Home() {
               <div className="receipt-row" key={line.product.id}>
                 <div>
                   <strong>{line.rowNumber}. {line.product.name}</strong>
-                  <span>Было {num(line.previousRest)} · доступно {num(line.available)}</span>
+                  <span>{num(line.previousRest)}</span>
                 </div>
                 <div className="small-stepper">
                   <button type="button" onClick={() => adjustIncoming(line.product.id, -1)} disabled={!canEditReport} aria-label="Уменьшить приход">
@@ -1799,30 +2181,28 @@ export default function Home() {
 
       {activeTab === "finance" && (
         <section className="screen finance-screen">
-          <div className="screen-head">
-            <div>
-              <span className="overline">Финансы</span>
-              <h2>Касса и разница</h2>
-            </div>
-            <WalletCards size={22} />
-          </div>
-
           <div className="finance-grid">
-            <Metric label="Факт продаж" value={currency(revenue)} tone="neutral" />
-            <Metric label="Водители" value={currency(cashTotal.productRevenue)} tone={Math.abs(financeRevenueGap) > 0.01 ? "warn" : "good"} />
-            <Metric label="Разница факт" value={currency(financeRevenueGap)} tone={Math.abs(financeRevenueGap) > 0.01 ? "bad" : "good"} />
+            <Metric label="Продано" value={currency(revenue)} tone="neutral" />
             <Metric label="Сдали" value={currency(cashTotal.handedOver)} tone="neutral" />
-            <Metric label="Скидки" value={currency(financeTotals.discounts)} tone="warn" />
-            <Metric label="Расходы" value={currency(financeTotals.expenses)} tone="warn" />
-            <Metric label="Недостача" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
+            <Metric label="Разница" value={currency(financeRevenueGap)} tone={Math.abs(financeRevenueGap) > 0.01 ? "bad" : "good"} />
           </div>
 
-          {Math.abs(financeRevenueGap) > 0.01 && (
-            <div className="warning-note">
-              <AlertTriangle size={18} />
-              Выручка водителей не совпадает с продажами по факту.
-            </div>
-          )}
+          <details className="finance-more">
+            <summary>
+              Подробнее
+              <ChevronDown size={16} />
+            </summary>
+            <ReportRow label="Водители" value={currency(cashTotal.productRevenue)} tone={Math.abs(financeRevenueGap) > 0.01 ? "bad" : "good"} />
+            <ReportRow label="Скидки" value={currency(financeTotals.discounts)} />
+            <ReportRow label="Расходы" value={currency(financeTotals.expenses)} />
+            <ReportRow label="Недостача" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
+            {Math.abs(financeRevenueGap) > 0.01 && (
+              <div className="warning-note">
+                <AlertTriangle size={18} />
+                Выручка водителей не совпадает с продажами по факту.
+              </div>
+            )}
+          </details>
 
           <div className="driver-tabs" aria-label="Водители">
             {cashColumnKeys.map((columnKey) => {
@@ -1992,10 +2372,14 @@ export default function Home() {
             </div>
           )}
 
-          <div className="analytics-panel">
+          <details className="analytics-panel">
+            <summary>
+              Общая статистика
+              <ChevronDown size={16} />
+            </summary>
             <div className="panel-title">
-              <strong>Общая статистика</strong>
-              <span>{analytics.weekStart} → {selectedDate}</span>
+              <strong>{analytics.weekStart} → {selectedDate}</strong>
+              <span />
             </div>
             <div className="finance-grid">
               <Metric label="Неделя" value={currency(analytics.week.total)} tone="neutral" />
@@ -2013,12 +2397,16 @@ export default function Home() {
                 items={analytics.month.drivers.slice(0, 5).map((item) => ({ label: `${item.name} · ${item.point}`, value: currency(item.value) }))}
               />
             </div>
-          </div>
+          </details>
 
-          <div className="carryover-panel">
+          <details className="carryover-panel">
+            <summary>
+              Контроль остатков
+              <ChevronDown size={16} />
+            </summary>
             <div className="panel-title">
-              <strong>Контроль остатков</strong>
-              <span>{carryoverAudit.previousDate}</span>
+              <strong>{carryoverAudit.previousDate}</strong>
+              <span />
             </div>
             <ReportRow label="Вчерашний отчет закрыт" value={carryoverAudit.previousClosed ? "Да" : "Нет"} tone={carryoverAudit.previousClosed ? "good" : "bad"} />
             <ReportRow label="Перенесено позиций" value={`${carryoverAudit.currentPreviousRestCount} / ${inventoryLines.length}`} />
@@ -2026,7 +2414,7 @@ export default function Home() {
               <RefreshCcw size={18} />
               Перенести остатки на сегодня
             </button>
-          </div>
+          </details>
 
           <div className="settings-panel">
             <label>
@@ -2058,38 +2446,58 @@ export default function Home() {
               </select>
             </label>
             <div className="settings-actions">
-              <button type="button" className="secondary-action" onClick={() => importInputRef.current?.click()}>
+              <button type="button" className="secondary-action" onClick={() => importInputRef.current?.click()} aria-label="Импорт из шаблона" title="Импорт из шаблона">
                 <Upload size={18} />
-                Импорт из шаблона
               </button>
-              <button type="button" className="secondary-action" onClick={generateDiscrepancyImage} disabled={discrepancyLines.length === 0}>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={generateDiscrepancyImage}
+                disabled={discrepancyLines.length === 0}
+                aria-label="Отчет расхождений"
+                title="Отчет расхождений"
+              >
                 <ImageDown size={18} />
-                Отчет расхождений
               </button>
-              <button type="button" className="secondary-action" onClick={resetRestsToZeroWithoutShortage} disabled={!canEditReport}>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={resetRestsToZeroWithoutShortage}
+                disabled={!canEditReport}
+                aria-label="Обнулить без недостачи"
+                title="Обнулить без недостачи"
+              >
                 <Eraser size={18} />
-                Обнулить без недостачи
               </button>
-              <button type="button" className="secondary-action" onClick={checkSupabaseConnection} disabled={serverCheck.status === "checking"}>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={checkSupabaseConnection}
+                disabled={serverCheck.status === "checking"}
+                aria-label="Проверить Supabase"
+                title="Проверить Supabase"
+              >
                 <Wifi size={18} />
-                Проверить Supabase
               </button>
-              <button type="button" className="secondary-action" onClick={() => setUiSoundEnabled((current) => !current)}>
+              <button
+                type="button"
+                className="secondary-action"
+                onClick={() => setUiSoundEnabled((current) => !current)}
+                aria-label={uiSoundEnabled ? "Выключить звук" : "Включить звук"}
+                title={uiSoundEnabled ? "Выключить звук" : "Включить звук"}
+              >
                 {uiSoundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-                {uiSoundEnabled ? "Звук включен" : "Звук выключен"}
               </button>
             </div>
             <div className={`server-status ${serverCheck.status}`}>
               {serverCheck.message}
             </div>
             <div className="download-actions">
-              <button type="button" className="secondary-action" onClick={() => exportExcel("single")}>
+              <button type="button" className="secondary-action" onClick={() => exportExcel("single")} aria-label="Отчет точки" title="Отчет точки">
                 <Download size={18} />
-                Отчет точки
               </button>
-              <button type="button" className="secondary-action" onClick={() => exportExcel("all")}>
+              <button type="button" className="secondary-action" onClick={() => exportExcel("all")} aria-label="Все точки" title="Все точки">
                 <Download size={18} />
-                Все точки
               </button>
             </div>
           </div>
@@ -2185,10 +2593,29 @@ export default function Home() {
               <div className="product-admin-list">
                 {adminProducts.map((product) => (
                   <div className="product-admin-row" key={product.id}>
+                    <div className="order-controls">
+                      <button type="button" onClick={() => moveProductShelf(product.id, -1)} aria-label="Выше">
+                        <ArrowUp size={14} />
+                      </button>
+                      <button type="button" onClick={() => moveProductShelf(product.id, 1)} aria-label="Ниже">
+                        <ArrowDown size={14} />
+                      </button>
+                    </div>
                     <input value={product.name} onChange={(event) => updateProduct(product.id, { name: event.target.value })} />
                     <input inputMode="decimal" value={num(product.price)} onChange={(event) => updateProduct(product.id, { price: parseNumber(event.target.value) })} />
                     <input inputMode="decimal" value={num(product.norm)} onChange={(event) => updateProduct(product.id, { norm: parseNumber(event.target.value) })} />
                     <input value={product.category} onChange={(event) => updateProduct(product.id, { category: event.target.value })} />
+                    <input inputMode="numeric" value={String(product.shelfOrder ?? "")} onChange={(event) => updateProduct(product.id, { shelfOrder: parseNumber(event.target.value) || undefined })} aria-label="Порядок полки" />
+                    <input
+                      inputMode="decimal"
+                      value={num(product.quantityStep ?? 1)}
+                      onChange={(event) => updateProduct(product.id, { quantityStep: Math.max(0.01, parseNumber(event.target.value) || 1) })}
+                      aria-label="Шаг"
+                    />
+                    <label className="mini-toggle">
+                      <input type="checkbox" checked={Boolean(product.allowDecimal)} onChange={(event) => updateProduct(product.id, { allowDecimal: event.target.checked, quantityStep: event.target.checked ? product.quantityStep ?? 0.5 : 1 })} />
+                      0.5
+                    </label>
                     <label className="mini-toggle">
                       <input type="checkbox" checked={product.active} onChange={(event) => updateProduct(product.id, { active: event.target.checked })} />
                       Актив.
@@ -2229,7 +2656,7 @@ export default function Home() {
                       line={line}
                       onClick={() => {
                         setProgressOpen(false);
-                        startQuick(line.product.id, null);
+                        startQuick(line.product.id);
                       }}
                     />
                   ))}
@@ -2247,7 +2674,7 @@ export default function Home() {
                       line={line}
                       onClick={() => {
                         setProgressOpen(false);
-                        startQuick(line.product.id, null);
+                        startQuick(line.product.id);
                       }}
                     />
                   ))}
@@ -2258,7 +2685,7 @@ export default function Home() {
         </div>
       )}
 
-      <nav className="bottom-nav" aria-label="Основное меню">
+      {!isFocusMode && <nav className="bottom-nav" aria-label="Основное меню">
         <NavButton icon={<HomeIcon size={20} />} label="Главная" active={activeTab === "home"} onClick={() => setActiveTab("home")} />
         <NavButton
           icon={<Package size={20} />}
@@ -2266,7 +2693,7 @@ export default function Home() {
           active={activeTab === "inventory"}
           badge={missingCount}
           onClick={() => {
-            setInventoryView("categories");
+            setInventoryView("list");
             setActiveTab("inventory");
           }}
         />
@@ -2274,9 +2701,9 @@ export default function Home() {
         <NavButton icon={<Truck size={20} />} label="Перемещ." active={activeTab === "transfers"} onClick={() => setActiveTab("transfers")} />
         <NavButton icon={<WalletCards size={20} />} label="Финансы" active={activeTab === "finance"} onClick={() => setActiveTab("finance")} />
         <NavButton icon={<MoreHorizontal size={20} />} label="Еще" active={activeTab === "more"} onClick={() => setActiveTab("more")} />
-      </nav>
+      </nav>}
 
-      {lastSaved && <span className="save-stamp">Сохранено {lastSaved}</span>}
+      {false && lastSaved && <span className="save-stamp">Автосохранение</span>}
     </main>
   );
 }
@@ -2349,12 +2776,11 @@ function NavButton({
   onClick: () => void;
 }) {
   return (
-    <button type="button" className={active ? "active" : ""} onClick={onClick}>
+    <button type="button" className={active ? "active" : ""} onClick={onClick} aria-label={label} title={label}>
       <span className="nav-icon">
         {icon}
         {Boolean(badge) && <b>{badge}</b>}
       </span>
-      <span>{label}</span>
     </button>
   );
 }

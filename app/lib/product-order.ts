@@ -148,6 +148,10 @@ function inferCategory(name: string) {
   return "Крепкий алкоголь";
 }
 
+function inferAllowDecimal(name: string) {
+  return /beer|heineken|corona|stella|budweiser|carlsberg|amstel|peroni|guinness|hoegarden|asahi|red horse|can|btl/i.test(name);
+}
+
 function pointNumberMap(points: Point[], number: number) {
   return Object.fromEntries(points.map((point) => [point.id, number]));
 }
@@ -188,6 +192,9 @@ export function normalizeProductCatalog(products: Product[], points: Point[]): P
       name,
       category: existing?.category && existing.category !== "Товары из шаблона" ? existing.category : inferCategory(name),
       active: existing?.active ?? true,
+      shelfOrder: existing?.shelfOrder ?? rowNumber,
+      allowDecimal: existing?.allowDecimal ?? inferAllowDecimal(name),
+      quantityStep: existing?.quantityStep ?? (inferAllowDecimal(name) ? 0.5 : 1),
       pointIds: allPointIds,
       numbersByPoint: pointNumberMap(points, rowNumber)
     } satisfies Product;
@@ -197,6 +204,9 @@ export function normalizeProductCatalog(products: Product[], points: Point[]): P
     .filter((product) => !usedIds.has(product.id))
     .map((product, index) => ({
       ...product,
+      shelfOrder: product.shelfOrder ?? CANONICAL_PRODUCT_NAMES.length + index + 1,
+      allowDecimal: product.allowDecimal ?? inferAllowDecimal(product.name),
+      quantityStep: product.quantityStep ?? (inferAllowDecimal(product.name) ? 0.5 : 1),
       numbersByPoint: pointNumberMap(points, CANONICAL_PRODUCT_NAMES.length + index + 1)
     }));
 
@@ -204,6 +214,7 @@ export function normalizeProductCatalog(products: Product[], points: Point[]): P
 }
 
 export function productSortNumber(product: Product, pointId?: string) {
+  if (typeof product.shelfOrder === "number") return product.shelfOrder;
   const canonicalIndex = CANONICAL_PRODUCT_NAMES.findIndex((name) => normalizeName(name) === normalizeName(product.name));
   if (canonicalIndex >= 0) return canonicalIndex + 1;
   return pointId ? product.numbersByPoint?.[pointId] ?? 10000 : 10000;

@@ -15,6 +15,9 @@ export type Product = {
   norm: number;
   category: string;
   active: boolean;
+  shelfOrder?: number;
+  allowDecimal?: boolean;
+  quantityStep?: number;
   pointIds?: string[];
   excelRowsByPoint?: Record<string, number>;
   numbersByPoint?: Record<string, number>;
