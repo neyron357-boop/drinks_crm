@@ -125,7 +125,10 @@ label {
 
 .app-shell.focus-mode {
   width: min(100%, 520px);
-  padding: 10px 12px 18px;
+  height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+  padding: 8px 12px calc(16px + env(safe-area-inset-bottom));
 }
 
 .app-header {
@@ -723,10 +726,10 @@ label {
 }
 
 .quick-fill {
-  display: flex;
+  display: grid;
   min-height: calc(100vh - 34px);
-  flex-direction: column;
-  gap: 10px;
+  grid-template-rows: auto minmax(170px, 1fr) auto auto auto auto;
+  gap: 8px;
 }
 
 .quick-top {
@@ -767,8 +770,10 @@ label {
 }
 
 .photo-viewer img {
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  height: auto;
   transform-origin: center;
   transition: transform 0.08s linear;
   user-select: none;
@@ -808,14 +813,15 @@ label {
 }
 
 .quick-product {
-  display: flex;
-  min-height: 132px;
-  flex-direction: column;
-  justify-content: space-between;
+  display: grid;
+  min-height: 54px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
   border: 0;
   border-radius: var(--radius);
   background: var(--surface);
-  padding: 15px;
+  padding: 8px 10px;
 }
 
 .quick-row-number {
@@ -833,14 +839,29 @@ label {
 }
 
 .quick-product h2 {
-  margin-top: 8px;
-  font-size: 26px;
-  line-height: 1.08;
-  min-height: 57px;
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.15;
+  min-height: 0;
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
+}
+
+.quick-previous {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.quick-previous strong {
+  color: var(--text);
+  font-size: 18px;
 }
 
 .status-line {
@@ -996,75 +1017,72 @@ label {
 }
 
 .focus-mode .photo-viewer {
-  height: 12vh;
-  min-height: 64px;
-  max-height: 88px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: none;
 }
 
 .focus-mode .quick-fill {
-  gap: 8px;
+  height: calc(100dvh - 20px - env(safe-area-inset-bottom));
+  min-height: 0;
+  grid-template-rows: 36px minmax(195px, 1fr) 40px 52px 132px 44px;
+  gap: 6px;
 }
 
 .focus-mode .report-photo-panel {
-  padding: 6px;
+  min-height: 0;
+  padding: 5px;
 }
 
 .focus-mode .photo-actions {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
+  right: 9px;
+  bottom: 9px;
   margin-top: 0;
 }
 
 .focus-mode .photo-actions button {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
 }
 
 .focus-mode .quick-product {
-  display: grid;
   min-height: 0;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 9px;
-  padding: 8px 10px;
+  padding: 7px 10px;
 }
 
 .focus-mode .quick-product h2 {
   min-height: 0;
   margin-top: 0;
-  font-size: 18px;
+  font-size: 16px;
   -webkit-line-clamp: 1;
 }
 
 .focus-mode .quick-row-number {
-  font-size: 34px;
-}
-
-.focus-mode .quick-facts {
-  grid-template-columns: 70px;
-  margin-top: 0;
-}
-
-.focus-mode .quick-facts div {
-  padding: 5px 7px;
-}
-
-.focus-mode .rest-input {
-  gap: 6px;
-}
-
-.focus-mode .rest-input input {
-  height: 46px;
   font-size: 30px;
 }
 
+.focus-mode .rest-input {
+  justify-content: start;
+  gap: 2px;
+  font-size: 11px;
+}
+
+.focus-mode .rest-input input {
+  height: 40px;
+  font-size: 28px;
+}
+
 .focus-mode .number-pad {
-  gap: 6px;
+  align-content: stretch;
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+  gap: 5px;
 }
 
 .focus-mode .number-pad button {
-  min-height: 31px;
+  min-height: 0;
+  height: auto;
 }
 
 .focus-mode .quick-extra {
@@ -1074,6 +1092,25 @@ label {
 .focus-mode .quick-actions .secondary-action,
 .focus-mode .quick-actions .primary-action {
   min-height: 44px;
+}
+
+.focus-mode .quick-actions {
+  grid-template-columns: 54px 54px minmax(0, 1fr);
+  margin-top: 0;
+}
+
+.focus-mode .quick-top {
+  min-height: 36px;
+}
+
+.focus-mode .quick-top .icon-button {
+  width: 38px;
+  min-height: 36px;
+}
+
+.focus-mode .quick-counter {
+  margin-left: auto;
+  font-size: 22px;
 }
 
 .receipt-summary {

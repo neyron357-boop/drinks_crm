@@ -848,8 +848,8 @@ export default function Home() {
     const scale = Math.min(Math.max(transform.scale, 1), 4);
     return {
       scale,
-      x: scale === 1 ? 0 : Math.min(Math.max(transform.x, -520), 520),
-      y: scale === 1 ? 0 : Math.min(Math.max(transform.y, -520), 520)
+      x: Math.min(Math.max(transform.x, -2400), 2400),
+      y: Math.min(Math.max(transform.y, -3200), 3200)
     };
   }
 
@@ -913,6 +913,10 @@ export default function Home() {
 
   function toggleReportPhotoZoom() {
     setReportPhotoTransform((current) => (current.scale > 1 ? { scale: 1, x: 0, y: 0 } : { scale: 2.4, x: 0, y: 0 }));
+  }
+
+  function resetReportPhotoPosition() {
+    setReportPhotoTransform({ scale: 1, x: 0, y: 0 });
   }
 
   function normalizeReceiptText(value: string) {
@@ -1780,6 +1784,9 @@ export default function Home() {
                   >
                     <ClipboardPaste size={18} />
                   </button>
+                  <button type="button" onClick={resetReportPhotoPosition} aria-label="Сбросить фото" title="Сбросить фото">
+                    <RefreshCcw size={18} />
+                  </button>
                   {reportClipboardState === "found" && <span>Найдено изображение в буфере</span>}
                 </div>
               </div>
@@ -1789,11 +1796,9 @@ export default function Home() {
                   <div className={`quick-product ${quickTone}`}>
                     <strong className="quick-row-number">{quickLine.rowNumber}</strong>
                     <h2>{quickLine.product.name}</h2>
-                    <div className="quick-facts">
-                      <div>
-                        <span>Было</span>
-                        <strong>{num(quickLine.previousRest)}</strong>
-                      </div>
+                    <div className="quick-previous">
+                      <span>Было:</span>
+                      <strong>{num(quickLine.previousRest)}</strong>
                     </div>
                   </div>
 
