@@ -1861,10 +1861,10 @@ export default function Home() {
 
               <input ref={reportPhotoInputRef} className="hidden-file-input" type="file" accept="image/*" onChange={handleReportPhotoFile} />
 
-              <div className="report-photo-panel no-ios-callout">
+              <div className="photoBlock no-ios-callout">
                 <div
                   ref={reportPhotoContainerRef}
-                  className={reportPhotoUrl ? "photo-viewer has-photo" : "photo-viewer"}
+                  className={reportPhotoUrl ? "photoViewport has-photo" : "photoViewport"}
                   onPointerDown={handleReportPhotoPointerDown}
                   onPointerMove={handleReportPhotoPointerMove}
                   onPointerUp={handleReportPhotoPointerUp}
@@ -1887,18 +1887,9 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-                <button
-                  type="button"
-                  className="photo-speech-toggle"
-                  onClick={() => setSpeechEnabled((current) => !current)}
-                  aria-label={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
-                  title={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
-                >
-                  {speechEnabled ? <Volume2 size={22} /> : <VolumeX size={22} />}
-                </button>
-                <div className="photo-actions">
+                <div className="photoToolbar">
                   <button type="button" onClick={() => reportPhotoInputRef.current?.click()} aria-label="Галерея" title="Галерея">
-                    <ImagePlus size={18} />
+                    <ImagePlus size={20} />
                   </button>
                   <button
                     type="button"
@@ -1906,12 +1897,19 @@ export default function Home() {
                     aria-label="Вставить из буфера"
                     title="Вставить из буфера"
                   >
-                    <ClipboardPaste size={18} />
+                    <ClipboardPaste size={20} />
                   </button>
                   <button type="button" onClick={resetReportPhotoPosition} aria-label="Сбросить фото" title="Сбросить фото">
-                    <RefreshCcw size={18} />
+                    <RefreshCcw size={20} />
                   </button>
-                  {reportClipboardState === "found" && <span>Найдено изображение в буфере</span>}
+                  <button
+                    type="button"
+                    onClick={() => setSpeechEnabled((current) => !current)}
+                    aria-label={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
+                    title={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
+                  >
+                    {speechEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                  </button>
                 </div>
               </div>
 
