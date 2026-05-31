@@ -49,6 +49,36 @@ body {
   line-height: 1.45;
 }
 
+.no-ios-callout,
+.no-ios-callout * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.no-ios-callout
+  :where(
+    textarea,
+    input[type="text"],
+    input[type="search"],
+    input[type="email"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="password"],
+    input[type="number"]
+  ):not([readonly]):not([disabled]),
+.no-ios-callout :where([contenteditable="true"], [contenteditable="plaintext-only"]) {
+  -webkit-touch-callout: default;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.tap-target {
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
 nextjs-portal,
 [aria-label="Open Next.js Dev Tools"],
 [aria-label="Close Next.js Dev Tools"],
@@ -68,6 +98,8 @@ button {
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -971,6 +1003,10 @@ label {
   font-weight: 950;
   letter-spacing: 0;
   text-align: center;
+}
+
+.rest-input input[readonly] {
+  caret-color: transparent;
 }
 
 .number-pad {
