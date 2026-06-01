@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import {
   AlertTriangle,
@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ClipboardPaste,
+  Delete as DeleteIcon,
   Download,
   Eraser,
   ImageDown,
@@ -88,34 +89,34 @@ const categoryDefs: Array<{
 }> = [
   {
     id: "spirits",
-    title: "Крепкий алкоголь",
-    icon: "🥃",
+    title: "ÐšÑ€ÐµÐ¿ÐºÐ¸Ð¹ Ð°Ð»ÐºÐ¾Ð³Ð¾Ð»ÑŒ",
+    icon: "ðŸ¥ƒ",
     matcher:
       /absolut|vodka|whisk|whisky|jack|j\/w|johnnie|chivas|gin|rum|tequila|cognac|hennessy|raki|arak|patron|don julio|aperol|belvedere|beluga|cirok|smirnoff|bacardi|macallan|glen/i
   },
   {
     id: "beer",
-    title: "Пиво",
-    icon: "🍺",
+    title: "ÐŸÐ¸Ð²Ð¾",
+    icon: "ðŸº",
     matcher: /beer|heineken|corona|stella|budweiser|carlsberg|amstel|peroni|guinness|hoegarden|asahi|red horse|can|btl/i
   },
   {
     id: "wine",
-    title: "Вино",
-    icon: "🍷",
+    title: "Ð’Ð¸Ð½Ð¾",
+    icon: "ðŸ·",
     matcher:
       /wine|chardonnay|merlot|sauv|cabernet|pinot|shiraz|malbec|rioj|chablis|gavi|sancerre|bourgogne|campo|oyster|ksara|mateus|calvet|castel|chateau|rose/i
   },
   {
     id: "sparkling",
-    title: "Шампанское",
-    icon: "🍾",
+    title: "Ð¨Ð°Ð¼Ð¿Ð°Ð½ÑÐºÐ¾Ðµ",
+    icon: "ðŸ¾",
     matcher: /champagne|moet|veuve|prosecco|asti|bottega|ruinart|dom perignon|brut|sparkling|zonin/i
   },
   {
     id: "premium",
-    title: "Премиум",
-    icon: "⭐",
+    title: "ÐŸÑ€ÐµÐ¼Ð¸ÑƒÐ¼",
+    icon: "â­",
     matcher:
       /blue label|gold label|xo|vsop|royal salute|chivas 18|chivas 25|macallan|dom perignon|clase azul|don julio 1942|grey goose|cirok|veuve|ruinart|patron/i
   }
@@ -134,14 +135,14 @@ type CashNumberField =
   | "otherExpenses";
 
 const cashFields: Array<[CashNumberField, string]> = [
-  ["discounts", "Скидки"],
-  ["foodExpenses", "Питание"],
-  ["fuel", "Бензин"],
+  ["discounts", "Ð¡ÐºÐ¸Ð´ÐºÐ¸"],
+  ["foodExpenses", "ÐŸÐ¸Ñ‚Ð°Ð½Ð¸Ðµ"],
+  ["fuel", "Ð‘ÐµÐ½Ð·Ð¸Ð½"],
   ["kfc", "KFC"],
-  ["forHome", "Для дома"],
-  ["carWash", "Мойка"],
-  ["tinting", "Тонировка"],
-  ["otherExpenses", "Другие расходы"]
+  ["forHome", "Ð”Ð»Ñ Ð´Ð¾Ð¼Ð°"],
+  ["carWash", "ÐœÐ¾Ð¹ÐºÐ°"],
+  ["tinting", "Ð¢Ð¾Ð½Ð¸Ñ€Ð¾Ð²ÐºÐ°"],
+  ["otherExpenses", "Ð”Ñ€ÑƒÐ³Ð¸Ðµ Ñ€Ð°ÑÑ…Ð¾Ð´Ñ‹"]
 ];
 
 const todayIso = () => {
@@ -165,7 +166,7 @@ function slugify(value: string) {
     value
       .trim()
       .toLowerCase()
-      .replace(/[^a-z0-9а-яё]+/gi, "-")
+      .replace(/[^a-z0-9Ð°-ÑÑ‘]+/gi, "-")
       .replace(/^-|-$/g, "") || `item-${makeId()}`
   );
 }
@@ -214,9 +215,9 @@ function lineTone(line: ReportLine): LineTone {
 
 function lineStatusText(line: ReportLine) {
   const tone = lineTone(line);
-  if (tone === "empty") return "Не заполнено";
-  if (tone === "warn") return "Проверьте данные";
-  return "Заполнено";
+  if (tone === "empty") return "ÐÐµ Ð·Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¾";
+  if (tone === "warn") return "ÐŸÑ€Ð¾Ð²ÐµÑ€ÑŒÑ‚Ðµ Ð´Ð°Ð½Ð½Ñ‹Ðµ";
+  return "Ð—Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¾";
 }
 
 function productMatchesCategory(product: Product, categoryId: CategoryId) {
@@ -299,14 +300,14 @@ export default function Home() {
   const [transferSearch, setTransferSearch] = useState("");
   const [newPointName, setNewPointName] = useState("");
   const [newDriver, setNewDriver] = useState({ name: "", pointId: "jvc" });
-  const [newProduct, setNewProduct] = useState({ name: "", price: "", norm: "", category: "Напитки" });
+  const [newProduct, setNewProduct] = useState({ name: "", price: "", norm: "", category: "ÐÐ°Ð¿Ð¸Ñ‚ÐºÐ¸" });
   const [newCustomExpense, setNewCustomExpense] = useState({ label: "", amount: "" });
   const [productAdminSearch, setProductAdminSearch] = useState("");
   const [quickPreviewRest, setQuickPreviewRest] = useState<number | undefined>(undefined);
   const [bulkSelectedIds, setBulkSelectedIds] = useState<string[]>([]);
   const [bulkRestValue, setBulkRestValue] = useState("");
   const [importMode, setImportMode] = useState<ImportMode>("merge");
-  const [serverCheck, setServerCheck] = useState<ServerCheck>({ status: "idle", message: "Проверка не запускалась" });
+  const [serverCheck, setServerCheck] = useState<ServerCheck>({ status: "idle", message: "ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð½Ðµ Ð·Ð°Ð¿ÑƒÑÐºÐ°Ð»Ð°ÑÑŒ" });
   const [uiSoundEnabled, setUiSoundEnabled] = useState(true);
   const [reportPhotoUrl, setReportPhotoUrl] = useState("");
   const [reportClipboardState, setReportClipboardState] = useState<ClipboardImageState>("idle");
@@ -541,7 +542,7 @@ export default function Home() {
           const id = `${cash.driverName || cash.columnKey || "driver"}-${report.pointId}`;
           const driverEntry = driverMap.get(id) ?? {
             id,
-            name: cash.driverName || String(cash.columnKey ?? "Водитель"),
+            name: cash.driverName || String(cash.columnKey ?? "Ð’Ð¾Ð´Ð¸Ñ‚ÐµÐ»ÑŒ"),
             point: point?.name ?? report.pointId,
             value: 0
           };
@@ -809,13 +810,13 @@ export default function Home() {
   function loadReportPhoto(file: File | Blob) {
     setImageUrl(file, setReportPhotoUrl, reportPhotoUrl);
     setReportPhotoTransform({ scale: 1, x: 0, y: 0 });
-    setNotice("Фото отчета добавлено.");
+    setNotice("Ð¤Ð¾Ñ‚Ð¾ Ð¾Ñ‚Ñ‡ÐµÑ‚Ð° Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ð¾.");
   }
 
   function loadReceiptPhoto(file: File | Blob) {
     setImageUrl(file, setReceiptPhotoUrl, receiptPhotoUrl);
     setReceiptCandidates([]);
-    setNotice("Фото чека добавлено. Запустите OCR и проверьте строки.");
+    setNotice("Ð¤Ð¾Ñ‚Ð¾ Ñ‡ÐµÐºÐ° Ð´Ð¾Ð±Ð°Ð²Ð»ÐµÐ½Ð¾. Ð—Ð°Ð¿ÑƒÑÑ‚Ð¸Ñ‚Ðµ OCR Ð¸ Ð¿Ñ€Ð¾Ð²ÐµÑ€ÑŒÑ‚Ðµ ÑÑ‚Ñ€Ð¾ÐºÐ¸.");
   }
 
   function handleReportPhotoFile(event: ChangeEvent<HTMLInputElement>) {
@@ -920,7 +921,7 @@ export default function Home() {
   }
 
   function normalizeReceiptText(value: string) {
-    return value.toLowerCase().replace(/[^a-z0-9а-яё]+/gi, " ");
+    return value.toLowerCase().replace(/[^a-z0-9Ð°-ÑÑ‘]+/gi, " ");
   }
 
   function matchReceiptProduct(rawText: string) {
@@ -935,7 +936,7 @@ export default function Home() {
   }
 
   function extractReceiptQuantity(rawText: string) {
-    const qtyMatch = rawText.match(/(?:qty|qnty|quantity|кол-?во|x)\s*[:x]?\s*(\d+(?:[.,]\d+)?)/i);
+    const qtyMatch = rawText.match(/(?:qty|qnty|quantity|ÐºÐ¾Ð»-?Ð²Ð¾|x)\s*[:x]?\s*(\d+(?:[.,]\d+)?)/i);
     if (qtyMatch) return qtyMatch[1].replace(",", ".");
     const numbers = rawText.match(/\d+(?:[.,]\d+)?/g) ?? [];
     const plausible = numbers.map((value) => parseNumber(value)).filter((value) => value > 0 && value <= 500);
@@ -946,7 +947,7 @@ export default function Home() {
     return text
       .split(/\r?\n/)
       .map((line) => line.trim())
-      .filter((line) => line.length >= 4 && /[a-zа-я]/i.test(line))
+      .filter((line) => line.length >= 4 && /[a-zÐ°-Ñ]/i.test(line))
       .slice(0, 40)
       .map((line) => {
         const product = matchReceiptProduct(line);
@@ -962,15 +963,15 @@ export default function Home() {
   async function runReceiptOcr() {
     if (!receiptPhotoUrl || receiptOcrBusy) return;
     setReceiptOcrBusy(true);
-    setNotice("OCR читает чек. После распознавания нужно проверить строки.");
+    setNotice("OCR Ñ‡Ð¸Ñ‚Ð°ÐµÑ‚ Ñ‡ÐµÐº. ÐŸÐ¾ÑÐ»Ðµ Ñ€Ð°ÑÐ¿Ð¾Ð·Ð½Ð°Ð²Ð°Ð½Ð¸Ñ Ð½ÑƒÐ¶Ð½Ð¾ Ð¿Ñ€Ð¾Ð²ÐµÑ€Ð¸Ñ‚ÑŒ ÑÑ‚Ñ€Ð¾ÐºÐ¸.");
     try {
       const tesseract = await import("tesseract.js");
       const result = await tesseract.recognize(receiptPhotoUrl, "eng");
       const candidates = buildReceiptCandidates(result.data.text);
       setReceiptCandidates(candidates);
-      setNotice(candidates.length ? "OCR готов. Проверьте строки перед применением." : "OCR не нашел товарные строки. Попробуйте другое фото.");
+      setNotice(candidates.length ? "OCR Ð³Ð¾Ñ‚Ð¾Ð². ÐŸÑ€Ð¾Ð²ÐµÑ€ÑŒÑ‚Ðµ ÑÑ‚Ñ€Ð¾ÐºÐ¸ Ð¿ÐµÑ€ÐµÐ´ Ð¿Ñ€Ð¸Ð¼ÐµÐ½ÐµÐ½Ð¸ÐµÐ¼." : "OCR Ð½Ðµ Ð½Ð°ÑˆÐµÐ» Ñ‚Ð¾Ð²Ð°Ñ€Ð½Ñ‹Ðµ ÑÑ‚Ñ€Ð¾ÐºÐ¸. ÐŸÐ¾Ð¿Ñ€Ð¾Ð±ÑƒÐ¹Ñ‚Ðµ Ð´Ñ€ÑƒÐ³Ð¾Ðµ Ñ„Ð¾Ñ‚Ð¾.");
     } catch {
-      setNotice("OCR не запустился. Проверьте фото или подключение.");
+      setNotice("OCR Ð½Ðµ Ð·Ð°Ð¿ÑƒÑÑ‚Ð¸Ð»ÑÑ. ÐŸÑ€Ð¾Ð²ÐµÑ€ÑŒÑ‚Ðµ Ñ„Ð¾Ñ‚Ð¾ Ð¸Ð»Ð¸ Ð¿Ð¾Ð´ÐºÐ»ÑŽÑ‡ÐµÐ½Ð¸Ðµ.");
     } finally {
       setReceiptOcrBusy(false);
     }
@@ -1003,7 +1004,7 @@ export default function Home() {
             name: candidate.rawText,
             price: 0,
             norm: 0,
-            category: "Напитки",
+            category: "ÐÐ°Ð¿Ð¸Ñ‚ÐºÐ¸",
             active: true,
             shelfOrder: Math.max(0, ...nextProducts.map((item) => item.shelfOrder ?? 0)) + 1,
             allowDecimal: false,
@@ -1023,7 +1024,7 @@ export default function Home() {
       return replaceReport({ ...current, products: nextProducts }, { ...existing, items: nextItems });
     });
     setReceiptCandidates([]);
-    setNotice("Приход применен после проверки.");
+    setNotice("ÐŸÑ€Ð¸Ñ…Ð¾Ð´ Ð¿Ñ€Ð¸Ð¼ÐµÐ½ÐµÐ½ Ð¿Ð¾ÑÐ»Ðµ Ð¿Ñ€Ð¾Ð²ÐµÑ€ÐºÐ¸.");
   }
 
   function toggleBulkProduct(productId: string) {
@@ -1054,7 +1055,7 @@ export default function Home() {
       }
       return { ...report, items: nextItems };
     });
-    setNotice(`Массово заполнено: ${selected.length}`);
+    setNotice(`ÐœÐ°ÑÑÐ¾Ð²Ð¾ Ð·Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¾: ${selected.length}`);
   }
 
   function carryForwardCurrentRests() {
@@ -1074,7 +1075,7 @@ export default function Home() {
       }
       return { ...report, items: nextItems };
     });
-    setNotice("Остатки перенесены: теперь меняйте только проданные позиции.");
+    setNotice("ÐžÑÑ‚Ð°Ñ‚ÐºÐ¸ Ð¿ÐµÑ€ÐµÐ½ÐµÑÐµÐ½Ñ‹: Ñ‚ÐµÐ¿ÐµÑ€ÑŒ Ð¼ÐµÐ½ÑÐ¹Ñ‚Ðµ Ñ‚Ð¾Ð»ÑŒÐºÐ¾ Ð¿Ñ€Ð¾Ð´Ð°Ð½Ð½Ñ‹Ðµ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¸.");
   }
 
   function syncSelectedRevenueFromFact() {
@@ -1082,7 +1083,7 @@ export default function Home() {
       .filter((cash) => cash.columnKey !== selectedCashColumn)
       .reduce((total, cash) => total + cash.productRevenue, 0);
     updateCash("productRevenue", Math.max(0, parseNumber(String(revenue - otherRevenue))));
-    setNotice("Выручка выбранного водителя сверена с продажами по факту.");
+    setNotice("Ð’Ñ‹Ñ€ÑƒÑ‡ÐºÐ° Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ð¾Ð³Ð¾ Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»Ñ ÑÐ²ÐµÑ€ÐµÐ½Ð° Ñ Ð¿Ñ€Ð¾Ð´Ð°Ð¶Ð°Ð¼Ð¸ Ð¿Ð¾ Ñ„Ð°ÐºÑ‚Ñƒ.");
   }
 
   function resetRestsToZeroWithoutShortage() {
@@ -1120,7 +1121,7 @@ export default function Home() {
       };
       return replaceReport(current, finalReport);
     });
-    setNotice("Остатки обнулены, касса выбранного водителя выровнена без недостачи.");
+    setNotice("ÐžÑÑ‚Ð°Ñ‚ÐºÐ¸ Ð¾Ð±Ð½ÑƒÐ»ÐµÐ½Ñ‹, ÐºÐ°ÑÑÐ° Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ð¾Ð³Ð¾ Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»Ñ Ð²Ñ‹Ñ€Ð¾Ð²Ð½ÐµÐ½Ð° Ð±ÐµÐ· Ð½ÐµÐ´Ð¾ÑÑ‚Ð°Ñ‡Ð¸.");
   }
 
   function updateDiscrepancy(productId: string, patch: Partial<ReportItemInput>) {
@@ -1129,7 +1130,7 @@ export default function Home() {
 
   function generateDiscrepancyImage() {
     if (discrepancyLines.length === 0) {
-      setNotice("Нет отмеченных расхождений для отчета.");
+      setNotice("ÐÐµÑ‚ Ð¾Ñ‚Ð¼ÐµÑ‡ÐµÐ½Ð½Ñ‹Ñ… Ñ€Ð°ÑÑ…Ð¾Ð¶Ð´ÐµÐ½Ð¸Ð¹ Ð´Ð»Ñ Ð¾Ñ‚Ñ‡ÐµÑ‚Ð°.");
       return;
     }
 
@@ -1143,7 +1144,7 @@ export default function Home() {
     });
 
     if (problemLines.length === 0) {
-      setNotice("Нет проблемных позиций для PNG отчета.");
+      setNotice("ÐÐµÑ‚ Ð¿Ñ€Ð¾Ð±Ð»ÐµÐ¼Ð½Ñ‹Ñ… Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¹ Ð´Ð»Ñ PNG Ð¾Ñ‚Ñ‡ÐµÑ‚Ð°.");
       return;
     }
 
@@ -1160,10 +1161,10 @@ export default function Home() {
     context.fillRect(0, 0, width, height);
     context.fillStyle = "#55d3c1";
     context.font = "800 38px Arial";
-    context.fillText("ОТЧЕТ ПО РАСХОЖДЕНИЯМ", 48, 66);
+    context.fillText("ÐžÐ¢Ð§Ð•Ð¢ ÐŸÐž Ð ÐÐ¡Ð¥ÐžÐ–Ð”Ð•ÐÐ˜Ð¯Ðœ", 48, 66);
     context.fillStyle = "#f5f7fb";
     context.font = "600 22px Arial";
-    context.fillText(`${selectedPoint?.name ?? selectedPointId} · ${shortDate(selectedDate)}`, 48, 104);
+    context.fillText(`${selectedPoint?.name ?? selectedPointId} Â· ${shortDate(selectedDate)}`, 48, 104);
 
     problemLines.forEach((line, index) => {
       const item = currentReport.items[line.product.id];
@@ -1185,19 +1186,19 @@ export default function Home() {
 
       context.fillStyle = "#8f97a3";
       context.font = "700 18px Arial";
-      context.fillText("Система", 78, y + 52);
-      context.fillText("Водитель", 410, y + 52);
-      context.fillText("Разница", 742, y + 52);
+      context.fillText("Ð¡Ð¸ÑÑ‚ÐµÐ¼Ð°", 78, y + 52);
+      context.fillText("Ð’Ð¾Ð´Ð¸Ñ‚ÐµÐ»ÑŒ", 410, y + 52);
+      context.fillText("Ð Ð°Ð·Ð½Ð¸Ñ†Ð°", 742, y + 52);
 
       context.fillStyle = "#d6dbe4";
       context.font = "600 20px Arial";
-      context.fillText(`Остаток ${num(line.homeRest)}`, 78, y + 86);
-      context.fillText(`Продажа ${num(line.sale)}`, 78, y + 118);
-      context.fillText(`Остаток ${num(driverRest)}`, 410, y + 86);
-      context.fillText(`Продажа ${num(driverSale)}`, 410, y + 118);
+      context.fillText(`ÐžÑÑ‚Ð°Ñ‚Ð¾Ðº ${num(line.homeRest)}`, 78, y + 86);
+      context.fillText(`ÐŸÑ€Ð¾Ð´Ð°Ð¶Ð° ${num(line.sale)}`, 78, y + 118);
+      context.fillText(`ÐžÑÑ‚Ð°Ñ‚Ð¾Ðº ${num(driverRest)}`, 410, y + 86);
+      context.fillText(`ÐŸÑ€Ð¾Ð´Ð°Ð¶Ð° ${num(driverSale)}`, 410, y + 118);
       context.fillStyle = restGap || saleGap ? "#f0b84d" : "#55d3c1";
-      context.fillText(`Остаток ${restGap > 0 ? "+" : ""}${num(restGap)}`, 742, y + 86);
-      context.fillText(`Продажа ${saleGap > 0 ? "+" : ""}${num(saleGap)}`, 742, y + 118);
+      context.fillText(`ÐžÑÑ‚Ð°Ñ‚Ð¾Ðº ${restGap > 0 ? "+" : ""}${num(restGap)}`, 742, y + 86);
+      context.fillText(`ÐŸÑ€Ð¾Ð´Ð°Ð¶Ð° ${saleGap > 0 ? "+" : ""}${num(saleGap)}`, 742, y + 118);
     });
 
     try {
@@ -1212,9 +1213,9 @@ export default function Home() {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      setNotice("Изображение отчета по расхождениям готово и скачивается.");
+      setNotice("Ð˜Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ðµ Ð¾Ñ‚Ñ‡ÐµÑ‚Ð° Ð¿Ð¾ Ñ€Ð°ÑÑ…Ð¾Ð¶Ð´ÐµÐ½Ð¸ÑÐ¼ Ð³Ð¾Ñ‚Ð¾Ð²Ð¾ Ð¸ ÑÐºÐ°Ñ‡Ð¸Ð²Ð°ÐµÑ‚ÑÑ.");
     } catch {
-      setNotice("Не удалось создать изображение отчета. Попробуйте отметить меньше позиций за один раз.");
+      setNotice("ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ ÑÐ¾Ð·Ð´Ð°Ñ‚ÑŒ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ðµ Ð¾Ñ‚Ñ‡ÐµÑ‚Ð°. ÐŸÐ¾Ð¿Ñ€Ð¾Ð±ÑƒÐ¹Ñ‚Ðµ Ð¾Ñ‚Ð¼ÐµÑ‚Ð¸Ñ‚ÑŒ Ð¼ÐµÐ½ÑŒÑˆÐµ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¹ Ð·Ð° Ð¾Ð´Ð¸Ð½ Ñ€Ð°Ð·.");
     }
   }
 
@@ -1226,10 +1227,10 @@ export default function Home() {
       const imported = await importExcelReport(state, file, { date: selectedDate, mode: importMode });
       setState(imported.state);
       setNotice(
-        `Импорт готов: создано ${imported.result.createdReports}, обновлено ${imported.result.updatedReports}.`
+        `Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚ Ð³Ð¾Ñ‚Ð¾Ð²: ÑÐ¾Ð·Ð´Ð°Ð½Ð¾ ${imported.result.createdReports}, Ð¾Ð±Ð½Ð¾Ð²Ð»ÐµÐ½Ð¾ ${imported.result.updatedReports}.`
       );
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Не удалось импортировать шаблон.");
+      setNotice(error instanceof Error ? error.message : "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¸Ð¼Ð¿Ð¾Ñ€Ñ‚Ð¸Ñ€Ð¾Ð²Ð°Ñ‚ÑŒ ÑˆÐ°Ð±Ð»Ð¾Ð½.");
     }
   }
 
@@ -1237,11 +1238,11 @@ export default function Home() {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/$/, "");
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     if (!url || !anonKey) {
-      setServerCheck({ status: "error", message: "Supabase не настроен в .env" });
+      setServerCheck({ status: "error", message: "Supabase Ð½Ðµ Ð½Ð°ÑÑ‚Ñ€Ð¾ÐµÐ½ Ð² .env" });
       return;
     }
 
-    setServerCheck({ status: "checking", message: "Проверяю соединение..." });
+    setServerCheck({ status: "checking", message: "ÐŸÑ€Ð¾Ð²ÐµÑ€ÑÑŽ ÑÐ¾ÐµÐ´Ð¸Ð½ÐµÐ½Ð¸Ðµ..." });
     try {
       const response = await fetch(`${url}/rest/v1/`, {
         headers: {
@@ -1251,10 +1252,10 @@ export default function Home() {
       });
       setServerCheck({
         status: response.ok ? "ok" : "error",
-        message: response.ok ? "Связь с Supabase есть" : `Supabase ответил: ${response.status}`
+        message: response.ok ? "Ð¡Ð²ÑÐ·ÑŒ Ñ Supabase ÐµÑÑ‚ÑŒ" : `Supabase Ð¾Ñ‚Ð²ÐµÑ‚Ð¸Ð»: ${response.status}`
       });
     } catch {
-      setServerCheck({ status: "error", message: "Нет связи с Supabase" });
+      setServerCheck({ status: "error", message: "ÐÐµÑ‚ ÑÐ²ÑÐ·Ð¸ Ñ Supabase" });
     }
   }
 
@@ -1336,7 +1337,7 @@ export default function Home() {
       name: newProduct.name.trim(),
       price: parseNumber(newProduct.price),
       norm: parseNumber(newProduct.norm),
-      category: newProduct.category.trim() || "Напитки",
+      category: newProduct.category.trim() || "ÐÐ°Ð¿Ð¸Ñ‚ÐºÐ¸",
       active: true,
       shelfOrder: Math.max(0, ...state.products.map((item) => item.shelfOrder ?? 0)) + 1,
       allowDecimal: false,
@@ -1344,7 +1345,7 @@ export default function Home() {
       pointIds: state.points.filter((point) => point.active).map((point) => point.id)
     };
     setState((current) => ({ ...current, products: [...current.products, product] }));
-    setNewProduct({ name: "", price: "", norm: "", category: "Напитки" });
+    setNewProduct({ name: "", price: "", norm: "", category: "ÐÐ°Ð¿Ð¸Ñ‚ÐºÐ¸" });
   }
 
   function updateProduct(productId: string, patch: Partial<Product>) {
@@ -1494,7 +1495,7 @@ export default function Home() {
       return;
     }
     setInventoryView("list");
-    setNotice("Инвентаризация заполнена.");
+    setNotice("Ð˜Ð½Ð²ÐµÐ½Ñ‚Ð°Ñ€Ð¸Ð·Ð°Ñ†Ð¸Ñ Ð·Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð°.");
   }
 
   function goPrev() {
@@ -1505,7 +1506,7 @@ export default function Home() {
   function addTransfer() {
     if (currentReport.closed) return;
     if (transferForm.fromPointId === transferForm.toPointId || transferForm.quantity <= 0.001) {
-      setNotice("Проверьте точки и количество перемещения.");
+      setNotice("ÐŸÑ€Ð¾Ð²ÐµÑ€ÑŒÑ‚Ðµ Ñ‚Ð¾Ñ‡ÐºÐ¸ Ð¸ ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾ Ð¿ÐµÑ€ÐµÐ¼ÐµÑ‰ÐµÐ½Ð¸Ñ.");
       return;
     }
     const transfer: Transfer = {
@@ -1516,7 +1517,7 @@ export default function Home() {
     };
     setState((current) => ({ ...current, transfers: [transfer, ...current.transfers] }));
     setTransferForm((current) => ({ ...current, quantity: 1, comment: "" }));
-    setNotice("Перемещение сохранено.");
+    setNotice("ÐŸÐµÑ€ÐµÐ¼ÐµÑ‰ÐµÐ½Ð¸Ðµ ÑÐ¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ð¾.");
   }
 
   function removeTransfer(id: string) {
@@ -1525,12 +1526,12 @@ export default function Home() {
 
   function closeDay() {
     if (missingCount > 0) {
-      setNotice(`Закрытие недоступно: осталось заполнить ${missingCount} товаров.`);
+      setNotice(`Ð—Ð°ÐºÑ€Ñ‹Ñ‚Ð¸Ðµ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð¾: Ð¾ÑÑ‚Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð¿Ð¾Ð»Ð½Ð¸Ñ‚ÑŒ ${missingCount} Ñ‚Ð¾Ð²Ð°Ñ€Ð¾Ð².`);
       return;
     }
     const result = canCloseReport(state, currentReport);
     if (!result.ok) {
-      setNotice(`Нельзя закрыть: ${result.warnings.slice(0, 2).join("; ")}`);
+      setNotice(`ÐÐµÐ»ÑŒÐ·Ñ Ð·Ð°ÐºÑ€Ñ‹Ñ‚ÑŒ: ${result.warnings.slice(0, 2).join("; ")}`);
       return;
     }
     setState((current) => {
@@ -1541,7 +1542,7 @@ export default function Home() {
       };
       return applyCarryoverAfterClose(replaceReport(current, closedReport), closedReport);
     });
-    setNotice("День закрыт. Остатки перенесены на следующий день.");
+    setNotice("Ð”ÐµÐ½ÑŒ Ð·Ð°ÐºÑ€Ñ‹Ñ‚. ÐžÑÑ‚Ð°Ñ‚ÐºÐ¸ Ð¿ÐµÑ€ÐµÐ½ÐµÑÐµÐ½Ñ‹ Ð½Ð° ÑÐ»ÐµÐ´ÑƒÑŽÑ‰Ð¸Ð¹ Ð´ÐµÐ½ÑŒ.");
   }
 
   function reopenDay() {
@@ -1552,7 +1553,7 @@ export default function Home() {
         closedAt: undefined
       })
     );
-    setNotice("Отчет снова открыт.");
+    setNotice("ÐžÑ‚Ñ‡ÐµÑ‚ ÑÐ½Ð¾Ð²Ð° Ð¾Ñ‚ÐºÑ€Ñ‹Ñ‚.");
   }
 
   async function exportExcel(pointScope: ExportOptions["pointScope"] = "single") {
@@ -1569,9 +1570,9 @@ export default function Home() {
       });
       const url = URL.createObjectURL(file.blob);
       setPreparedDownload({ url, fileName: file.fileName });
-      setNotice("Отчет подготовлен.");
+      setNotice("ÐžÑ‚Ñ‡ÐµÑ‚ Ð¿Ð¾Ð´Ð³Ð¾Ñ‚Ð¾Ð²Ð»ÐµÐ½.");
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Не удалось подготовить отчет.");
+      setNotice(error instanceof Error ? error.message : "ÐÐµ ÑƒÐ´Ð°Ð»Ð¾ÑÑŒ Ð¿Ð¾Ð´Ð³Ð¾Ñ‚Ð¾Ð²Ð¸Ñ‚ÑŒ Ð¾Ñ‚Ñ‡ÐµÑ‚.");
     }
   }
 
@@ -1589,7 +1590,7 @@ export default function Home() {
       {!isFocusMode && (
         <header className="app-header">
           <label className="point-select">
-            <select value={selectedPointId} onChange={(event) => selectPoint(event.target.value)} aria-label="Точка">
+            <select value={selectedPointId} onChange={(event) => selectPoint(event.target.value)} aria-label="Ð¢Ð¾Ñ‡ÐºÐ°">
               {state.points.filter((point) => point.active).map((point) => (
                 <option key={point.id} value={point.id}>
                   {point.name}
@@ -1605,7 +1606,7 @@ export default function Home() {
               type="date"
               value={selectedDate}
               onChange={(event) => setSelectedDate(event.target.value)}
-              aria-label="Дата"
+              aria-label="Ð”Ð°Ñ‚Ð°"
             />
           </label>
         </header>
@@ -1616,10 +1617,10 @@ export default function Home() {
           <span>{notice}</span>
           {preparedDownload && (
             <a href={preparedDownload.url} download={preparedDownload.fileName}>
-              Скачать
+              Ð¡ÐºÐ°Ñ‡Ð°Ñ‚ÑŒ
             </a>
           )}
-          <button type="button" onClick={() => setNotice("")} aria-label="Закрыть уведомление">
+          <button type="button" onClick={() => setNotice("")} aria-label="Ð—Ð°ÐºÑ€Ñ‹Ñ‚ÑŒ ÑƒÐ²ÐµÐ´Ð¾Ð¼Ð»ÐµÐ½Ð¸Ðµ">
             <X size={16} />
           </button>
         </section>
@@ -1638,17 +1639,17 @@ export default function Home() {
           </button>
 
           <div className="home-metrics">
-            <Metric label="Осталось" value={`${missingCount} товаров`} tone={missingCount ? "warn" : "neutral"} />
-            <Metric label="Выручка" value={currency(revenue)} tone="neutral" />
-            <Metric label="Недостача" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
+            <Metric label="ÐžÑÑ‚Ð°Ð»Ð¾ÑÑŒ" value={`${missingCount} Ñ‚Ð¾Ð²Ð°Ñ€Ð¾Ð²`} tone={missingCount ? "warn" : "neutral"} />
+            <Metric label="Ð’Ñ‹Ñ€ÑƒÑ‡ÐºÐ°" value={currency(revenue)} tone="neutral" />
+            <Metric label="ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‡Ð°" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
           </div>
 
           <button
             type="button"
             className="primary-cta icon-cta"
             onClick={continueFill}
-            aria-label={missingCount === 0 ? "Открыть закрытие дня" : "Продолжить заполнение"}
-            title={missingCount === 0 ? "Открыть закрытие дня" : "Продолжить"}
+            aria-label={missingCount === 0 ? "ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ð·Ð°ÐºÑ€Ñ‹Ñ‚Ð¸Ðµ Ð´Ð½Ñ" : "ÐŸÑ€Ð¾Ð´Ð¾Ð»Ð¶Ð¸Ñ‚ÑŒ Ð·Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ"}
+            title={missingCount === 0 ? "ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ð·Ð°ÐºÑ€Ñ‹Ñ‚Ð¸Ðµ Ð´Ð½Ñ" : "ÐŸÑ€Ð¾Ð´Ð¾Ð»Ð¶Ð¸Ñ‚ÑŒ"}
           >
             {missingCount === 0 ? <CheckCircle2 size={20} /> : <ArrowRight size={20} />}
           </button>
@@ -1664,14 +1665,14 @@ export default function Home() {
                 <input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Поиск товара"
-                  aria-label="Поиск товара"
+                  placeholder="ÐŸÐ¾Ð¸ÑÐº Ñ‚Ð¾Ð²Ð°Ñ€Ð°"
+                  aria-label="ÐŸÐ¾Ð¸ÑÐº Ñ‚Ð¾Ð²Ð°Ñ€Ð°"
                 />
               </label>
 
               <details className="bulk-panel">
                 <summary>
-                  <span>Массово</span>
+                  <span>ÐœÐ°ÑÑÐ¾Ð²Ð¾</span>
                   <strong>{bulkSelectedIds.length}</strong>
                   <ChevronDown size={16} />
                 </summary>
@@ -1680,7 +1681,7 @@ export default function Home() {
                     inputMode="decimal"
                     value={bulkRestValue}
                     onChange={(event) => setBulkRestValue(event.target.value)}
-                    placeholder="Одинаковый остаток"
+                    placeholder="ÐžÐ´Ð¸Ð½Ð°ÐºÐ¾Ð²Ñ‹Ð¹ Ð¾ÑÑ‚Ð°Ñ‚Ð¾Ðº"
                     disabled={!canEditReport}
                   />
                   <button
@@ -1688,12 +1689,12 @@ export default function Home() {
                     className="secondary-action"
                     onClick={selectVisibleBulkProducts}
                     disabled={!canEditReport}
-                    aria-label="Выбрать видимые"
-                    title="Выбрать видимые"
+                    aria-label="Ð’Ñ‹Ð±Ñ€Ð°Ñ‚ÑŒ Ð²Ð¸Ð´Ð¸Ð¼Ñ‹Ðµ"
+                    title="Ð’Ñ‹Ð±Ñ€Ð°Ñ‚ÑŒ Ð²Ð¸Ð´Ð¸Ð¼Ñ‹Ðµ"
                   >
                     <CheckCircle2 size={18} />
                   </button>
-                  <button type="button" className="secondary-action" onClick={() => setBulkSelectedIds([])} aria-label="Очистить" title="Очистить">
+                  <button type="button" className="secondary-action" onClick={() => setBulkSelectedIds([])} aria-label="ÐžÑ‡Ð¸ÑÑ‚Ð¸Ñ‚ÑŒ" title="ÐžÑ‡Ð¸ÑÑ‚Ð¸Ñ‚ÑŒ">
                     <X size={18} />
                   </button>
                   <button
@@ -1701,8 +1702,8 @@ export default function Home() {
                     className="primary-action"
                     onClick={applyBulkRest}
                     disabled={!canEditReport || bulkSelectedIds.length === 0}
-                    aria-label="Применить"
-                    title="Применить"
+                    aria-label="ÐŸÑ€Ð¸Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ"
+                    title="ÐŸÑ€Ð¸Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ"
                   >
                     <ArrowRight size={18} />
                   </button>
@@ -1717,7 +1718,7 @@ export default function Home() {
                         type="button"
                         className={bulkSelectedIds.includes(line.product.id) ? "select-box active" : "select-box"}
                         onClick={() => toggleBulkProduct(line.product.id)}
-                        aria-label="Выбрать товар"
+                        aria-label="Ð’Ñ‹Ð±Ñ€Ð°Ñ‚ÑŒ Ñ‚Ð¾Ð²Ð°Ñ€"
                       />
                       <button type="button" onClick={() => startQuick(line.product.id)}>
                         <span className={`dot ${lineTone(line)}`} />
@@ -1726,9 +1727,9 @@ export default function Home() {
                     </div>
                     <span>{num(line.previousRest)}</span>
                     <span>{num(line.incoming)}</span>
-                    <span>{typeof line.homeRest === "number" ? num(line.homeRest) : "—"}</span>
-                    <span>{typeof line.homeRest === "number" ? num(line.sale) : "—"}</span>
-                    <span>{typeof line.homeRest === "number" ? currency(line.amount) : "—"}</span>
+                    <span>{typeof line.homeRest === "number" ? num(line.homeRest) : "â€”"}</span>
+                    <span>{typeof line.homeRest === "number" ? num(line.sale) : "â€”"}</span>
+                    <span>{typeof line.homeRest === "number" ? currency(line.amount) : "â€”"}</span>
                   </div>
                 ))}
               </div>
@@ -1738,7 +1739,7 @@ export default function Home() {
           {inventoryView === "quick" && (
             <div className="quick-fill">
               <div className="quick-top">
-                <button type="button" className="icon-button" onClick={() => setInventoryView("list")} aria-label="Вернуться к списку">
+                <button type="button" className="icon-button" onClick={() => setInventoryView("list")} aria-label="Ð’ÐµÑ€Ð½ÑƒÑ‚ÑŒÑÑ Ðº ÑÐ¿Ð¸ÑÐºÑƒ">
                   <ArrowLeft size={18} />
                 </button>
                 <span className="quick-counter">
@@ -1760,7 +1761,7 @@ export default function Home() {
                   {reportPhotoUrl ? (
                     <img
                       src={reportPhotoUrl}
-                      alt="Фото отчета"
+                      alt="Ð¤Ð¾Ñ‚Ð¾ Ð¾Ñ‚Ñ‡ÐµÑ‚Ð°"
                       style={{
                         transform: `translate3d(${reportPhotoTransform.x}px, ${reportPhotoTransform.y}px, 0) scale(${reportPhotoTransform.scale})`
                       }}
@@ -1768,26 +1769,29 @@ export default function Home() {
                   ) : (
                     <div className="photo-empty">
                       <ImagePlus size={24} />
-                      <span>Фото отчета</span>
+                      <span>Ð¤Ð¾Ñ‚Ð¾ Ð¾Ñ‚Ñ‡ÐµÑ‚Ð°</span>
                     </div>
                   )}
                 </div>
                 <div className="photo-actions">
-                  <button type="button" onClick={() => reportPhotoInputRef.current?.click()} aria-label="Галерея" title="Галерея">
+                  <button type="button" onClick={() => reportPhotoInputRef.current?.click()} aria-label="Ð“Ð°Ð»ÐµÑ€ÐµÑ" title="Ð“Ð°Ð»ÐµÑ€ÐµÑ">
                     <ImagePlus size={18} />
+                    <span>Ð“Ð°Ð»ÐµÑ€ÐµÑ</span>
                   </button>
                   <button
                     type="button"
                     onClick={reportClipboardState === "found" ? pasteReportPhoto : checkClipboardForReportImage}
-                    aria-label="Вставить из буфера"
-                    title="Вставить из буфера"
+                    aria-label="Ð’ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ Ð¸Ð· Ð±ÑƒÑ„ÐµÑ€Ð°"
+                    title="Ð’ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ Ð¸Ð· Ð±ÑƒÑ„ÐµÑ€Ð°"
                   >
                     <ClipboardPaste size={18} />
+                    <span>Ð’ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ</span>
                   </button>
-                  <button type="button" onClick={resetReportPhotoPosition} aria-label="Сбросить фото" title="Сбросить фото">
+                  <button type="button" onClick={resetReportPhotoPosition} aria-label="Ð¡Ð±Ñ€Ð¾ÑÐ¸Ñ‚ÑŒ Ñ„Ð¾Ñ‚Ð¾" title="Ð¡Ð±Ñ€Ð¾ÑÐ¸Ñ‚ÑŒ Ñ„Ð¾Ñ‚Ð¾">
                     <RefreshCcw size={18} />
+                    <span>Ð¡Ð±Ñ€Ð¾ÑÐ¸Ñ‚ÑŒ</span>
                   </button>
-                  {reportClipboardState === "found" && <span>Найдено изображение в буфере</span>}
+                  {reportClipboardState === "found" && <span>ÐÐ°Ð¹Ð´ÐµÐ½Ð¾ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ðµ Ð² Ð±ÑƒÑ„ÐµÑ€Ðµ</span>}
                 </div>
               </div>
 
@@ -1797,43 +1801,73 @@ export default function Home() {
                     <strong className="quick-row-number">{quickLine.rowNumber}</strong>
                     <h2>{quickLine.product.name}</h2>
                     <div className="quick-previous">
-                      <span>Было:</span>
+                      <span>Ð‘Ñ‹Ð»Ð¾:</span>
                       <strong>{num(quickLine.previousRest)}</strong>
                     </div>
                   </div>
 
-                  <label className="rest-input">
-                    <span>Остаток</span>
-                    <div className="rest-stepper solo">
-                      <input
-                        key={quickLine.product.id}
-                        ref={quickInputRef}
-                        inputMode={quickLine && allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
-                        type="text"
-                        readOnly
-                        defaultValue={formatQuantity(quickLine.homeRest, quickLine.product)}
-                        onBlur={flushQuickCommit}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter") {
-                            event.preventDefault();
-                            goNext();
-                          }
-                          if (event.key === "ArrowUp") {
-                            event.preventDefault();
-                            adjustQuickRest(1);
-                          }
-                          if (event.key === "ArrowDown") {
-                            event.preventDefault();
-                            adjustQuickRest(-1);
-                          }
-                        }}
-                        disabled={!canEditReport}
-                        aria-label="Остаток товара"
-                      />
+                  <div className="quick-entry-grid">
+                    <div className="quick-summary-card">
+                      <span>ÐŸÑ€Ð¾Ð´Ð°Ð½Ð¾</span>
+                      <strong>{typeof quickPreviewSale === "number" ? num(quickPreviewSale) : "â€”"}</strong>
                     </div>
-                  </label>
 
-                  <div className="number-pad" aria-label="Цифровая клавиатура">
+                    <label className="rest-input">
+                      <span>ÐžÐ¡Ð¢ÐÐ¢ÐžÐš</span>
+                      <div className="rest-stepper solo">
+                        <input
+                          key={quickLine.product.id}
+                          ref={quickInputRef}
+                          inputMode="none"
+                          type="text"
+                          readOnly
+                          tabIndex={-1}
+                          defaultValue={formatQuantity(quickLine.homeRest, quickLine.product)}
+                          onFocus={(event) => event.currentTarget.blur()}
+                          onBlur={flushQuickCommit}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              goNext();
+                            }
+                            if (event.key === "ArrowUp") {
+                              event.preventDefault();
+                              adjustQuickRest(1);
+                            }
+                            if (event.key === "ArrowDown") {
+                              event.preventDefault();
+                              adjustQuickRest(-1);
+                            }
+                          }}
+                          disabled={!canEditReport}
+                          aria-label="ÐžÑÑ‚Ð°Ñ‚Ð¾Ðº Ñ‚Ð¾Ð²Ð°Ñ€Ð°"
+                        />
+                        {typeof quickPreviewRest === "number" && (
+                          <span className="rest-check" aria-hidden="true">
+                            <CheckCircle2 size={18} />
+                          </span>
+                        )}
+                      </div>
+                    </label>
+
+                    <div className="quick-summary-card">
+                      <span>Ð¡ÑƒÐ¼Ð¼Ð°</span>
+                      <strong>{typeof quickPreviewAmount === "number" ? currency(quickPreviewAmount) : "â€”"}</strong>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={quickItem?.flagged ? "quick-discrepancy-button active" : "quick-discrepancy-button"}
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => updateDiscrepancy(quickLine.product.id, { flagged: !quickItem?.flagged })}
+                      disabled={!canEditReport}
+                    >
+                      <AlertTriangle size={26} />
+                      <span>Ð ÐÐ¡Ð¥ÐžÐ–Ð”Ð•ÐÐ˜Ð•</span>
+                    </button>
+                  </div>
+
+                  <div className="number-pad" aria-label="Ð¦Ð¸Ñ„Ñ€Ð¾Ð²Ð°Ñ ÐºÐ»Ð°Ð²Ð¸Ð°Ñ‚ÑƒÑ€Ð°">
                     {["7", "8", "9", "4", "5", "6", "1", "2", "3", "0", ".", "backspace"].map((key) => (
                       <button
                         type="button"
@@ -1841,26 +1875,26 @@ export default function Home() {
                         onPointerDown={(event) => event.preventDefault()}
                         onClick={() => pressQuickKey(key)}
                         disabled={!canEditReport || (key === "." && !allowsDecimalProduct(quickLine.product))}
-                        aria-label={key === "backspace" ? "Удалить цифру" : key}
+                        aria-label={key === "backspace" ? "Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ñ†Ð¸Ñ„Ñ€Ñƒ" : key}
                       >
-                        {key === "backspace" ? "⌫" : key}
+                        {key === "backspace" ? <DeleteIcon size={24} /> : key}
                       </button>
                     ))}
                   </div>
 
                   <details className="quick-extra">
                     <summary>
-                      Подробнее
+                      ÐŸÐ¾Ð´Ñ€Ð¾Ð±Ð½ÐµÐµ
                       <ChevronDown size={16} />
                     </summary>
                     <div className="auto-calc">
                       <div>
-                        <span>Продано</span>
-                        <strong>{typeof quickPreviewSale === "number" ? num(quickPreviewSale) : "—"}</strong>
+                        <span>ÐŸÑ€Ð¾Ð´Ð°Ð½Ð¾</span>
+                        <strong>{typeof quickPreviewSale === "number" ? num(quickPreviewSale) : "â€”"}</strong>
                       </div>
                       <div>
-                        <span>Сумма</span>
-                        <strong>{typeof quickPreviewAmount === "number" ? currency(quickPreviewAmount) : "—"}</strong>
+                        <span>Ð¡ÑƒÐ¼Ð¼Ð°</span>
+                        <strong>{typeof quickPreviewAmount === "number" ? currency(quickPreviewAmount) : "â€”"}</strong>
                       </div>
                     </div>
 
@@ -1873,12 +1907,12 @@ export default function Home() {
                         disabled={!canEditReport}
                       >
                         <AlertTriangle size={17} />
-                        {quickItem?.flagged ? "Расхождение отмечено" : "Отметить расхождение"}
+                        {quickItem?.flagged ? "Ð Ð°ÑÑ…Ð¾Ð¶Ð´ÐµÐ½Ð¸Ðµ Ð¾Ñ‚Ð¼ÐµÑ‡ÐµÐ½Ð¾" : "ÐžÑ‚Ð¼ÐµÑ‚Ð¸Ñ‚ÑŒ Ñ€Ð°ÑÑ…Ð¾Ð¶Ð´ÐµÐ½Ð¸Ðµ"}
                       </button>
                       {quickItem?.flagged && (
                         <div className="discrepancy-fields">
                           <label>
-                            Остаток у водителя
+                            ÐžÑÑ‚Ð°Ñ‚Ð¾Ðº Ñƒ Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»Ñ
                             <input
                               inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
                               value={formatQuantity(quickItem.driverRest, quickLine.product)}
@@ -1891,7 +1925,7 @@ export default function Home() {
                             />
                           </label>
                           <label>
-                            Продажа у водителя
+                            ÐŸÑ€Ð¾Ð´Ð°Ð¶Ð° Ñƒ Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»Ñ
                             <input
                               inputMode={allowsDecimalProduct(quickLine.product) ? "decimal" : "numeric"}
                               value={formatQuantity(quickItem.driverSale, quickLine.product)}
@@ -1910,7 +1944,7 @@ export default function Home() {
                     {quickTone === "warn" && (
                       <div className="warning-note">
                         <AlertTriangle size={18} />
-                        Проверьте данные
+                        ÐŸÑ€Ð¾Ð²ÐµÑ€ÑŒÑ‚Ðµ Ð´Ð°Ð½Ð½Ñ‹Ðµ
                       </div>
                     )}
                   </details>
@@ -1925,8 +1959,8 @@ export default function Home() {
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={keepPreviousAndNext}
                       disabled={!canEditReport}
-                      aria-label="Без изменений"
-                      title="Без изменений"
+                      aria-label="Ð‘ÐµÐ· Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ð¹"
+                      title="Ð‘ÐµÐ· Ð¸Ð·Ð¼ÐµÐ½ÐµÐ½Ð¸Ð¹"
                     >
                       <CheckCircle2 size={20} />
                     </button>
@@ -1935,8 +1969,8 @@ export default function Home() {
                       className="primary-action"
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={goNext}
-                      aria-label="Следующий товар"
-                      title="Следующий"
+                      aria-label="Ð¡Ð»ÐµÐ´ÑƒÑŽÑ‰Ð¸Ð¹ Ñ‚Ð¾Ð²Ð°Ñ€"
+                      title="Ð¡Ð»ÐµÐ´ÑƒÑŽÑ‰Ð¸Ð¹"
                     >
                       <ArrowRight size={18} />
                     </button>
@@ -1956,8 +1990,8 @@ export default function Home() {
               <input
                 value={transferSearch}
                 onChange={(event) => setTransferSearch(event.target.value)}
-                placeholder={transferProduct?.name ?? "Товар"}
-                aria-label="Найти товар для перемещения"
+                placeholder={transferProduct?.name ?? "Ð¢Ð¾Ð²Ð°Ñ€"}
+                aria-label="ÐÐ°Ð¹Ñ‚Ð¸ Ñ‚Ð¾Ð²Ð°Ñ€ Ð´Ð»Ñ Ð¿ÐµÑ€ÐµÐ¼ÐµÑ‰ÐµÐ½Ð¸Ñ"
               />
             </label>
 
@@ -1978,7 +2012,7 @@ export default function Home() {
             </div>
 
             <div className="transfer-stepper">
-              <span>Переместить</span>
+              <span>ÐŸÐµÑ€ÐµÐ¼ÐµÑÑ‚Ð¸Ñ‚ÑŒ</span>
               <div>
                 <button
                   type="button"
@@ -1990,7 +2024,7 @@ export default function Home() {
                       return { ...current, quantity: Math.max(step, quantity) };
                     })
                   }
-                  aria-label="Уменьшить количество"
+                  aria-label="Ð£Ð¼ÐµÐ½ÑŒÑˆÐ¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾"
                 >
                   <Minus size={18} />
                 </button>
@@ -2005,7 +2039,7 @@ export default function Home() {
                       return { ...current, quantity };
                     })
                   }
-                  aria-label="Увеличить количество"
+                  aria-label="Ð£Ð²ÐµÐ»Ð¸Ñ‡Ð¸Ñ‚ÑŒ ÐºÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾"
                 >
                   <Plus size={18} />
                 </button>
@@ -2014,7 +2048,7 @@ export default function Home() {
 
             <div className="two-fields">
               <label>
-                Откуда
+                ÐžÑ‚ÐºÑƒÐ´Ð°
                 <select
                   value={transferForm.fromPointId}
                   onChange={(event) => setTransferForm((current) => ({ ...current, fromPointId: event.target.value }))}
@@ -2027,7 +2061,7 @@ export default function Home() {
                 </select>
               </label>
               <label>
-                Куда
+                ÐšÑƒÐ´Ð°
                 <select
                   value={transferForm.toPointId}
                   onChange={(event) => setTransferForm((current) => ({ ...current, toPointId: event.target.value }))}
@@ -2041,7 +2075,7 @@ export default function Home() {
               </label>
             </div>
 
-            <button type="button" className="primary-cta icon-cta" onClick={addTransfer} disabled={!canEditReport} aria-label="Переместить" title="Переместить">
+            <button type="button" className="primary-cta icon-cta" onClick={addTransfer} disabled={!canEditReport} aria-label="ÐŸÐµÑ€ÐµÐ¼ÐµÑÑ‚Ð¸Ñ‚ÑŒ" title="ÐŸÐµÑ€ÐµÐ¼ÐµÑÑ‚Ð¸Ñ‚ÑŒ">
               <Truck size={20} />
             </button>
           </div>
@@ -2056,10 +2090,10 @@ export default function Home() {
                   <div>
                     <strong>{product}</strong>
                     <span>
-                      {from} → {to} · {transfer.quantity}
+                      {from} â†’ {to} Â· {transfer.quantity}
                     </span>
                   </div>
-                  <button type="button" onClick={() => removeTransfer(transfer.id)} aria-label="Удалить перемещение">
+                  <button type="button" onClick={() => removeTransfer(transfer.id)} aria-label="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð¿ÐµÑ€ÐµÐ¼ÐµÑ‰ÐµÐ½Ð¸Ðµ">
                     <X size={16} />
                   </button>
                 </div>
@@ -2075,30 +2109,30 @@ export default function Home() {
           <div className="receipt-import-panel">
             <div className={receiptPhotoUrl ? "receipt-photo-preview has-photo" : "receipt-photo-preview"}>
               {receiptPhotoUrl ? (
-                <img src={receiptPhotoUrl} alt="Фото чека" />
+                <img src={receiptPhotoUrl} alt="Ð¤Ð¾Ñ‚Ð¾ Ñ‡ÐµÐºÐ°" />
               ) : (
                 <div className="photo-empty">
                   <ImagePlus size={22} />
-                  <span>Фото чека</span>
+                  <span>Ð¤Ð¾Ñ‚Ð¾ Ñ‡ÐµÐºÐ°</span>
                 </div>
               )}
             </div>
             <div className="photo-actions">
-              <button type="button" onClick={() => receiptPhotoInputRef.current?.click()} aria-label="Галерея" title="Галерея">
+              <button type="button" onClick={() => receiptPhotoInputRef.current?.click()} aria-label="Ð“Ð°Ð»ÐµÑ€ÐµÑ" title="Ð“Ð°Ð»ÐµÑ€ÐµÑ">
                 <ImagePlus size={18} />
               </button>
               <button
                 type="button"
                 onClick={receiptClipboardState === "found" ? pasteReceiptPhoto : checkClipboardForReceiptImage}
-                aria-label="Вставить из буфера"
-                title="Вставить из буфера"
+                aria-label="Ð’ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ Ð¸Ð· Ð±ÑƒÑ„ÐµÑ€Ð°"
+                title="Ð’ÑÑ‚Ð°Ð²Ð¸Ñ‚ÑŒ Ð¸Ð· Ð±ÑƒÑ„ÐµÑ€Ð°"
               >
                 <ClipboardPaste size={18} />
               </button>
               <button type="button" onClick={runReceiptOcr} disabled={!receiptPhotoUrl || receiptOcrBusy} aria-label="OCR" title="OCR">
                 <Search size={18} />
               </button>
-              {receiptClipboardState === "found" && <span>Найдено изображение в буфере</span>}
+              {receiptClipboardState === "found" && <span>ÐÐ°Ð¹Ð´ÐµÐ½Ð¾ Ð¸Ð·Ð¾Ð±Ñ€Ð°Ð¶ÐµÐ½Ð¸Ðµ Ð² Ð±ÑƒÑ„ÐµÑ€Ðµ</span>}
             </div>
           </div>
 
@@ -2108,20 +2142,20 @@ export default function Home() {
                 <div className="receipt-review-row" key={candidate.id}>
                   <strong>{candidate.rawText}</strong>
                   <label>
-                    Товар
+                    Ð¢Ð¾Ð²Ð°Ñ€
                     <select value={candidate.productId} onChange={(event) => updateReceiptCandidate(candidate.id, { productId: event.target.value })}>
-                      <option value="">Выбрать товар вручную</option>
+                      <option value="">Ð’Ñ‹Ð±Ñ€Ð°Ñ‚ÑŒ Ñ‚Ð¾Ð²Ð°Ñ€ Ð²Ñ€ÑƒÑ‡Ð½ÑƒÑŽ</option>
                       {state.products.filter((product) => product.active).map((product) => (
                         <option key={product.id} value={product.id}>
                           {product.name}
                         </option>
                       ))}
-                      <option value="__new__">Создать новый товар</option>
-                      <option value="__skip__">Пропустить</option>
+                      <option value="__new__">Ð¡Ð¾Ð·Ð´Ð°Ñ‚ÑŒ Ð½Ð¾Ð²Ñ‹Ð¹ Ñ‚Ð¾Ð²Ð°Ñ€</option>
+                      <option value="__skip__">ÐŸÑ€Ð¾Ð¿ÑƒÑÑ‚Ð¸Ñ‚ÑŒ</option>
                     </select>
                   </label>
                   <label>
-                    Количество
+                    ÐšÐ¾Ð»Ð¸Ñ‡ÐµÑÑ‚Ð²Ð¾
                     <input
                       inputMode="decimal"
                       value={candidate.quantity}
@@ -2141,8 +2175,8 @@ export default function Home() {
             <input
               value={receiptSearch}
               onChange={(event) => setReceiptSearch(event.target.value)}
-              placeholder="Поиск товара для прихода"
-              aria-label="Поиск товара для прихода"
+              placeholder="ÐŸÐ¾Ð¸ÑÐº Ñ‚Ð¾Ð²Ð°Ñ€Ð° Ð´Ð»Ñ Ð¿Ñ€Ð¸Ñ…Ð¾Ð´Ð°"
+              aria-label="ÐŸÐ¾Ð¸ÑÐº Ñ‚Ð¾Ð²Ð°Ñ€Ð° Ð´Ð»Ñ Ð¿Ñ€Ð¸Ñ…Ð¾Ð´Ð°"
             />
           </label>
 
@@ -2154,7 +2188,7 @@ export default function Home() {
                   <span>{num(line.previousRest)}</span>
                 </div>
                 <div className="small-stepper">
-                  <button type="button" onClick={() => adjustIncoming(line.product.id, -1)} disabled={!canEditReport} aria-label="Уменьшить приход">
+                  <button type="button" onClick={() => adjustIncoming(line.product.id, -1)} disabled={!canEditReport} aria-label="Ð£Ð¼ÐµÐ½ÑŒÑˆÐ¸Ñ‚ÑŒ Ð¿Ñ€Ð¸Ñ…Ð¾Ð´">
                     <Minus size={16} />
                   </button>
                   <input
@@ -2172,9 +2206,9 @@ export default function Home() {
                       }
                     }}
                     disabled={!canEditReport}
-                    aria-label={`Приход ${line.product.name}`}
+                    aria-label={`ÐŸÑ€Ð¸Ñ…Ð¾Ð´ ${line.product.name}`}
                   />
-                  <button type="button" onClick={() => adjustIncoming(line.product.id, 1)} disabled={!canEditReport} aria-label="Увеличить приход">
+                  <button type="button" onClick={() => adjustIncoming(line.product.id, 1)} disabled={!canEditReport} aria-label="Ð£Ð²ÐµÐ»Ð¸Ñ‡Ð¸Ñ‚ÑŒ Ð¿Ñ€Ð¸Ñ…Ð¾Ð´">
                     <Plus size={16} />
                   </button>
                 </div>
@@ -2187,29 +2221,29 @@ export default function Home() {
       {activeTab === "finance" && (
         <section className="screen finance-screen">
           <div className="finance-grid">
-            <Metric label="Продано" value={currency(revenue)} tone="neutral" />
-            <Metric label="Сдали" value={currency(cashTotal.handedOver)} tone="neutral" />
-            <Metric label="Разница" value={currency(financeRevenueGap)} tone={Math.abs(financeRevenueGap) > 0.01 ? "bad" : "good"} />
+            <Metric label="ÐŸÑ€Ð¾Ð´Ð°Ð½Ð¾" value={currency(revenue)} tone="neutral" />
+            <Metric label="Ð¡Ð´Ð°Ð»Ð¸" value={currency(cashTotal.handedOver)} tone="neutral" />
+            <Metric label="Ð Ð°Ð·Ð½Ð¸Ñ†Ð°" value={currency(financeRevenueGap)} tone={Math.abs(financeRevenueGap) > 0.01 ? "bad" : "good"} />
           </div>
 
           <details className="finance-more">
             <summary>
-              Подробнее
+              ÐŸÐ¾Ð´Ñ€Ð¾Ð±Ð½ÐµÐµ
               <ChevronDown size={16} />
             </summary>
-            <ReportRow label="Водители" value={currency(cashTotal.productRevenue)} tone={Math.abs(financeRevenueGap) > 0.01 ? "bad" : "good"} />
-            <ReportRow label="Скидки" value={currency(financeTotals.discounts)} />
-            <ReportRow label="Расходы" value={currency(financeTotals.expenses)} />
-            <ReportRow label="Недостача" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
+            <ReportRow label="Ð’Ð¾Ð´Ð¸Ñ‚ÐµÐ»Ð¸" value={currency(cashTotal.productRevenue)} tone={Math.abs(financeRevenueGap) > 0.01 ? "bad" : "good"} />
+            <ReportRow label="Ð¡ÐºÐ¸Ð´ÐºÐ¸" value={currency(financeTotals.discounts)} />
+            <ReportRow label="Ð Ð°ÑÑ…Ð¾Ð´Ñ‹" value={currency(financeTotals.expenses)} />
+            <ReportRow label="ÐÐµÐ´Ð¾ÑÑ‚Ð°Ñ‡Ð°" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
             {Math.abs(financeRevenueGap) > 0.01 && (
               <div className="warning-note">
                 <AlertTriangle size={18} />
-                Выручка водителей не совпадает с продажами по факту.
+                Ð’Ñ‹Ñ€ÑƒÑ‡ÐºÐ° Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»ÐµÐ¹ Ð½Ðµ ÑÐ¾Ð²Ð¿Ð°Ð´Ð°ÐµÑ‚ Ñ Ð¿Ñ€Ð¾Ð´Ð°Ð¶Ð°Ð¼Ð¸ Ð¿Ð¾ Ñ„Ð°ÐºÑ‚Ñƒ.
               </div>
             )}
           </details>
 
-          <div className="driver-tabs" aria-label="Водители">
+          <div className="driver-tabs" aria-label="Ð’Ð¾Ð´Ð¸Ñ‚ÐµÐ»Ð¸">
             {cashColumnKeys.map((columnKey) => {
               const cash = cashColumns.find((item) => item.columnKey === columnKey) ?? calculateCash(emptyCash(columnKey));
               return (
@@ -2228,7 +2262,7 @@ export default function Home() {
 
           <div className="finance-editor">
             <label>
-              Водитель
+              Ð’Ð¾Ð´Ð¸Ñ‚ÐµÐ»ÑŒ
               <input
                 value={selectedCashInput.driverName}
                 onChange={(event) => updateCash("driverName", event.target.value)}
@@ -2237,7 +2271,7 @@ export default function Home() {
             </label>
             <div className="two-fields">
               <label>
-                Выручка
+                Ð’Ñ‹Ñ€ÑƒÑ‡ÐºÐ°
                 <input
                   inputMode="decimal"
                   value={num(selectedCashInput.productRevenue)}
@@ -2246,7 +2280,7 @@ export default function Home() {
                 />
               </label>
               <label>
-                Сдали
+                Ð¡Ð´Ð°Ð»Ð¸
                 <input
                   inputMode="decimal"
                   value={num(selectedCashInput.handedOver)}
@@ -2257,12 +2291,12 @@ export default function Home() {
             </div>
             <button type="button" className="secondary-wide" onClick={syncSelectedRevenueFromFact} disabled={!canEditReport}>
               <RefreshCcw size={18} />
-              Выровнять выбранного водителя по факту
+              Ð’Ñ‹Ñ€Ð¾Ð²Ð½ÑÑ‚ÑŒ Ð²Ñ‹Ð±Ñ€Ð°Ð½Ð½Ð¾Ð³Ð¾ Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»Ñ Ð¿Ð¾ Ñ„Ð°ÐºÑ‚Ñƒ
             </button>
 
             <details>
               <summary>
-                Расходы и скидки
+                Ð Ð°ÑÑ…Ð¾Ð´Ñ‹ Ð¸ ÑÐºÐ¸Ð´ÐºÐ¸
                 <ChevronDown size={16} />
               </summary>
               <div className="expense-grid">
@@ -2282,16 +2316,16 @@ export default function Home() {
 
             <div className="custom-expense-panel">
               <div className="panel-title">
-                <strong>Доп. расходы</strong>
+                <strong>Ð”Ð¾Ð¿. Ñ€Ð°ÑÑ…Ð¾Ð´Ñ‹</strong>
                 <span>{(selectedCashInput.customExpenses ?? []).length}</span>
               </div>
               <div className="custom-expense-form">
                 <input
                   value={newCustomExpense.label}
                   onChange={(event) => setNewCustomExpense((current) => ({ ...current, label: event.target.value }))}
-                  placeholder="Название"
+                  placeholder="ÐÐ°Ð·Ð²Ð°Ð½Ð¸Ðµ"
                   disabled={!canEditReport}
-                  aria-label="Название доп расхода"
+                  aria-label="ÐÐ°Ð·Ð²Ð°Ð½Ð¸Ðµ Ð´Ð¾Ð¿ Ñ€Ð°ÑÑ…Ð¾Ð´Ð°"
                 />
                 <input
                   inputMode="decimal"
@@ -2299,9 +2333,9 @@ export default function Home() {
                   onChange={(event) => setNewCustomExpense((current) => ({ ...current, amount: event.target.value }))}
                   placeholder="AED"
                   disabled={!canEditReport}
-                  aria-label="Сумма доп расхода"
+                  aria-label="Ð¡ÑƒÐ¼Ð¼Ð° Ð´Ð¾Ð¿ Ñ€Ð°ÑÑ…Ð¾Ð´Ð°"
                 />
-                <button type="button" onClick={addCustomExpense} disabled={!canEditReport} aria-label="Добавить доп расход">
+                <button type="button" onClick={addCustomExpense} disabled={!canEditReport} aria-label="Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ð´Ð¾Ð¿ Ñ€Ð°ÑÑ…Ð¾Ð´">
                   <Plus size={18} />
                 </button>
               </div>
@@ -2309,7 +2343,7 @@ export default function Home() {
                 <div className="custom-expense-row" key={expense.id}>
                   <span>{expense.label}</span>
                   <strong>{currency(expense.amount)}</strong>
-                  <button type="button" onClick={() => removeCustomExpense(expense.id)} disabled={!canEditReport} aria-label="Удалить доп расход">
+                  <button type="button" onClick={() => removeCustomExpense(expense.id)} disabled={!canEditReport} aria-label="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð´Ð¾Ð¿ Ñ€Ð°ÑÑ…Ð¾Ð´">
                     <X size={15} />
                   </button>
                 </div>
@@ -2317,9 +2351,9 @@ export default function Home() {
             </div>
 
             <div className="finance-result">
-              <span>Должен сдать</span>
+              <span>Ð”Ð¾Ð»Ð¶ÐµÐ½ ÑÐ´Ð°Ñ‚ÑŒ</span>
               <strong>{currency(selectedCash.shouldHandOver)}</strong>
-              <span>Разница</span>
+              <span>Ð Ð°Ð·Ð½Ð¸Ñ†Ð°</span>
               <strong className={selectedCash.shortageOrPlus < 0 ? "bad-text" : "good-text"}>{currency(selectedCash.shortageOrPlus)}</strong>
             </div>
           </div>
@@ -2330,8 +2364,8 @@ export default function Home() {
         <section className="screen more-screen">
           <div className="screen-head">
             <div>
-              <span className="overline">Еще</span>
-              <h2>Закрытие дня</h2>
+              <span className="overline">Ð•Ñ‰Ðµ</span>
+              <h2>Ð—Ð°ÐºÑ€Ñ‹Ñ‚Ð¸Ðµ Ð´Ð½Ñ</h2>
             </div>
             <Settings size={22} />
           </div>
@@ -2343,33 +2377,33 @@ export default function Home() {
                 <strong>
                   {filledCount} / {inventoryLines.length}
                 </strong>
-                <span>{missingCount ? `Осталось заполнить: ${missingCount} товаров` : "Проверка завершена"}</span>
+                <span>{missingCount ? `ÐžÑÑ‚Ð°Ð»Ð¾ÑÑŒ Ð·Ð°Ð¿Ð¾Ð»Ð½Ð¸Ñ‚ÑŒ: ${missingCount} Ñ‚Ð¾Ð²Ð°Ñ€Ð¾Ð²` : "ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ° Ð·Ð°Ð²ÐµÑ€ÑˆÐµÐ½Ð°"}</span>
               </div>
             </div>
             <button type="button" className="primary-cta" onClick={closeDay} disabled={closeDisabled}>
-              Закрыть день
+              Ð—Ð°ÐºÑ€Ñ‹Ñ‚ÑŒ Ð´ÐµÐ½ÑŒ
             </button>
             {currentReport.closed && (
               <button type="button" className="secondary-wide" onClick={reopenDay}>
-                Открыть отчет снова
+                ÐžÑ‚ÐºÑ€Ñ‹Ñ‚ÑŒ Ð¾Ñ‚Ñ‡ÐµÑ‚ ÑÐ½Ð¾Ð²Ð°
               </button>
             )}
           </div>
 
           <div className="report-card">
-            <h3>Отчет перед закрытием</h3>
-            <ReportRow label="Продано" value={currency(revenue)} />
-            <ReportRow label="Перемещения" value={currency(transferValue)} />
-            <ReportRow label="Скидки" value={currency(financeTotals.discounts)} />
-            <ReportRow label="Сдали" value={currency(cashTotal.handedOver)} />
-            <ReportRow label="Разница" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
+            <h3>ÐžÑ‚Ñ‡ÐµÑ‚ Ð¿ÐµÑ€ÐµÐ´ Ð·Ð°ÐºÑ€Ñ‹Ñ‚Ð¸ÐµÐ¼</h3>
+            <ReportRow label="ÐŸÑ€Ð¾Ð´Ð°Ð½Ð¾" value={currency(revenue)} />
+            <ReportRow label="ÐŸÐµÑ€ÐµÐ¼ÐµÑ‰ÐµÐ½Ð¸Ñ" value={currency(transferValue)} />
+            <ReportRow label="Ð¡ÐºÐ¸Ð´ÐºÐ¸" value={currency(financeTotals.discounts)} />
+            <ReportRow label="Ð¡Ð´Ð°Ð»Ð¸" value={currency(cashTotal.handedOver)} />
+            <ReportRow label="Ð Ð°Ð·Ð½Ð¸Ñ†Ð°" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
           </div>
 
           {(problemCount > 0 || reportWarningList.length > 0) && (
             <div className="warning-list">
               <div>
                 <AlertTriangle size={18} />
-                <strong>Проверка</strong>
+                <strong>ÐŸÑ€Ð¾Ð²ÐµÑ€ÐºÐ°</strong>
               </div>
               {reportWarningList.slice(0, 5).map((warning) => (
                 <span key={`${warning.code}-${warning.message}`}>{warning.message}</span>
@@ -2379,55 +2413,55 @@ export default function Home() {
 
           <details className="analytics-panel">
             <summary>
-              Общая статистика
+              ÐžÐ±Ñ‰Ð°Ñ ÑÑ‚Ð°Ñ‚Ð¸ÑÑ‚Ð¸ÐºÐ°
               <ChevronDown size={16} />
             </summary>
             <div className="panel-title">
-              <strong>{analytics.weekStart} → {selectedDate}</strong>
+              <strong>{analytics.weekStart} â†’ {selectedDate}</strong>
               <span />
             </div>
             <div className="finance-grid">
-              <Metric label="Неделя" value={currency(analytics.week.total)} tone="neutral" />
-              <Metric label="Месяц" value={currency(analytics.month.total)} tone="neutral" />
+              <Metric label="ÐÐµÐ´ÐµÐ»Ñ" value={currency(analytics.week.total)} tone="neutral" />
+              <Metric label="ÐœÐµÑÑÑ†" value={currency(analytics.month.total)} tone="neutral" />
             </div>
             <div className="analytics-columns">
-              <TopList title="Топ точек за неделю" items={analytics.week.points.slice(0, 5).map((item) => ({ label: item.name, value: currency(item.value) }))} />
+              <TopList title="Ð¢Ð¾Ð¿ Ñ‚Ð¾Ñ‡ÐµÐº Ð·Ð° Ð½ÐµÐ´ÐµÐ»ÑŽ" items={analytics.week.points.slice(0, 5).map((item) => ({ label: item.name, value: currency(item.value) }))} />
               <TopList
-                title="Топ водителей за неделю"
-                items={analytics.week.drivers.slice(0, 5).map((item) => ({ label: `${item.name} · ${item.point}`, value: currency(item.value) }))}
+                title="Ð¢Ð¾Ð¿ Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»ÐµÐ¹ Ð·Ð° Ð½ÐµÐ´ÐµÐ»ÑŽ"
+                items={analytics.week.drivers.slice(0, 5).map((item) => ({ label: `${item.name} Â· ${item.point}`, value: currency(item.value) }))}
               />
-              <TopList title="Топ точек за месяц" items={analytics.month.points.slice(0, 5).map((item) => ({ label: item.name, value: currency(item.value) }))} />
+              <TopList title="Ð¢Ð¾Ð¿ Ñ‚Ð¾Ñ‡ÐµÐº Ð·Ð° Ð¼ÐµÑÑÑ†" items={analytics.month.points.slice(0, 5).map((item) => ({ label: item.name, value: currency(item.value) }))} />
               <TopList
-                title="Топ водителей за месяц"
-                items={analytics.month.drivers.slice(0, 5).map((item) => ({ label: `${item.name} · ${item.point}`, value: currency(item.value) }))}
+                title="Ð¢Ð¾Ð¿ Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»ÐµÐ¹ Ð·Ð° Ð¼ÐµÑÑÑ†"
+                items={analytics.month.drivers.slice(0, 5).map((item) => ({ label: `${item.name} Â· ${item.point}`, value: currency(item.value) }))}
               />
             </div>
           </details>
 
           <details className="carryover-panel">
             <summary>
-              Контроль остатков
+              ÐšÐ¾Ð½Ñ‚Ñ€Ð¾Ð»ÑŒ Ð¾ÑÑ‚Ð°Ñ‚ÐºÐ¾Ð²
               <ChevronDown size={16} />
             </summary>
             <div className="panel-title">
               <strong>{carryoverAudit.previousDate}</strong>
               <span />
             </div>
-            <ReportRow label="Вчерашний отчет закрыт" value={carryoverAudit.previousClosed ? "Да" : "Нет"} tone={carryoverAudit.previousClosed ? "good" : "bad"} />
-            <ReportRow label="Перенесено позиций" value={`${carryoverAudit.currentPreviousRestCount} / ${inventoryLines.length}`} />
+            <ReportRow label="Ð’Ñ‡ÐµÑ€Ð°ÑˆÐ½Ð¸Ð¹ Ð¾Ñ‚Ñ‡ÐµÑ‚ Ð·Ð°ÐºÑ€Ñ‹Ñ‚" value={carryoverAudit.previousClosed ? "Ð”Ð°" : "ÐÐµÑ‚"} tone={carryoverAudit.previousClosed ? "good" : "bad"} />
+            <ReportRow label="ÐŸÐµÑ€ÐµÐ½ÐµÑÐµÐ½Ð¾ Ð¿Ð¾Ð·Ð¸Ñ†Ð¸Ð¹" value={`${carryoverAudit.currentPreviousRestCount} / ${inventoryLines.length}`} />
             <button type="button" className="secondary-wide" onClick={carryForwardCurrentRests} disabled={!canEditReport}>
               <RefreshCcw size={18} />
-              Перенести остатки на сегодня
+              ÐŸÐµÑ€ÐµÐ½ÐµÑÑ‚Ð¸ Ð¾ÑÑ‚Ð°Ñ‚ÐºÐ¸ Ð½Ð° ÑÐµÐ³Ð¾Ð´Ð½Ñ
             </button>
           </details>
 
           <div className="settings-panel">
             <label>
-              Дата отчета
+              Ð”Ð°Ñ‚Ð° Ð¾Ñ‚Ñ‡ÐµÑ‚Ð°
               <input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
             </label>
             <label>
-              Точка
+              Ð¢Ð¾Ñ‡ÐºÐ°
               <select value={selectedPointId} onChange={(event) => selectPoint(event.target.value)}>
                 {state.points.filter((point) => point.active).map((point) => (
                   <option key={point.id} value={point.id}>
@@ -2444,14 +2478,14 @@ export default function Home() {
               onChange={handleTemplateImport}
             />
             <label>
-              Режим импорта
+              Ð ÐµÐ¶Ð¸Ð¼ Ð¸Ð¼Ð¿Ð¾Ñ€Ñ‚Ð°
               <select value={importMode} onChange={(event) => setImportMode(event.target.value as ImportMode)}>
-                <option value="merge">Обновить найденные ячейки</option>
-                <option value="replace">Заменить отчет</option>
+                <option value="merge">ÐžÐ±Ð½Ð¾Ð²Ð¸Ñ‚ÑŒ Ð½Ð°Ð¹Ð´ÐµÐ½Ð½Ñ‹Ðµ ÑÑ‡ÐµÐ¹ÐºÐ¸</option>
+                <option value="replace">Ð—Ð°Ð¼ÐµÐ½Ð¸Ñ‚ÑŒ Ð¾Ñ‚Ñ‡ÐµÑ‚</option>
               </select>
             </label>
             <div className="settings-actions">
-              <button type="button" className="secondary-action" onClick={() => importInputRef.current?.click()} aria-label="Импорт из шаблона" title="Импорт из шаблона">
+              <button type="button" className="secondary-action" onClick={() => importInputRef.current?.click()} aria-label="Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚ Ð¸Ð· ÑˆÐ°Ð±Ð»Ð¾Ð½Ð°" title="Ð˜Ð¼Ð¿Ð¾Ñ€Ñ‚ Ð¸Ð· ÑˆÐ°Ð±Ð»Ð¾Ð½Ð°">
                 <Upload size={18} />
               </button>
               <button
@@ -2459,8 +2493,8 @@ export default function Home() {
                 className="secondary-action"
                 onClick={generateDiscrepancyImage}
                 disabled={discrepancyLines.length === 0}
-                aria-label="Отчет расхождений"
-                title="Отчет расхождений"
+                aria-label="ÐžÑ‚Ñ‡ÐµÑ‚ Ñ€Ð°ÑÑ…Ð¾Ð¶Ð´ÐµÐ½Ð¸Ð¹"
+                title="ÐžÑ‚Ñ‡ÐµÑ‚ Ñ€Ð°ÑÑ…Ð¾Ð¶Ð´ÐµÐ½Ð¸Ð¹"
               >
                 <ImageDown size={18} />
               </button>
@@ -2469,8 +2503,8 @@ export default function Home() {
                 className="secondary-action"
                 onClick={resetRestsToZeroWithoutShortage}
                 disabled={!canEditReport}
-                aria-label="Обнулить без недостачи"
-                title="Обнулить без недостачи"
+                aria-label="ÐžÐ±Ð½ÑƒÐ»Ð¸Ñ‚ÑŒ Ð±ÐµÐ· Ð½ÐµÐ´Ð¾ÑÑ‚Ð°Ñ‡Ð¸"
+                title="ÐžÐ±Ð½ÑƒÐ»Ð¸Ñ‚ÑŒ Ð±ÐµÐ· Ð½ÐµÐ´Ð¾ÑÑ‚Ð°Ñ‡Ð¸"
               >
                 <Eraser size={18} />
               </button>
@@ -2479,8 +2513,8 @@ export default function Home() {
                 className="secondary-action"
                 onClick={checkSupabaseConnection}
                 disabled={serverCheck.status === "checking"}
-                aria-label="Проверить Supabase"
-                title="Проверить Supabase"
+                aria-label="ÐŸÑ€Ð¾Ð²ÐµÑ€Ð¸Ñ‚ÑŒ Supabase"
+                title="ÐŸÑ€Ð¾Ð²ÐµÑ€Ð¸Ñ‚ÑŒ Supabase"
               >
                 <Wifi size={18} />
               </button>
@@ -2488,8 +2522,8 @@ export default function Home() {
                 type="button"
                 className="secondary-action"
                 onClick={() => setUiSoundEnabled((current) => !current)}
-                aria-label={uiSoundEnabled ? "Выключить звук" : "Включить звук"}
-                title={uiSoundEnabled ? "Выключить звук" : "Включить звук"}
+                aria-label={uiSoundEnabled ? "Ð’Ñ‹ÐºÐ»ÑŽÑ‡Ð¸Ñ‚ÑŒ Ð·Ð²ÑƒÐº" : "Ð’ÐºÐ»ÑŽÑ‡Ð¸Ñ‚ÑŒ Ð·Ð²ÑƒÐº"}
+                title={uiSoundEnabled ? "Ð’Ñ‹ÐºÐ»ÑŽÑ‡Ð¸Ñ‚ÑŒ Ð·Ð²ÑƒÐº" : "Ð’ÐºÐ»ÑŽÑ‡Ð¸Ñ‚ÑŒ Ð·Ð²ÑƒÐº"}
               >
                 {uiSoundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
               </button>
@@ -2498,10 +2532,10 @@ export default function Home() {
               {serverCheck.message}
             </div>
             <div className="download-actions">
-              <button type="button" className="secondary-action" onClick={() => exportExcel("single")} aria-label="Отчет точки" title="Отчет точки">
+              <button type="button" className="secondary-action" onClick={() => exportExcel("single")} aria-label="ÐžÑ‚Ñ‡ÐµÑ‚ Ñ‚Ð¾Ñ‡ÐºÐ¸" title="ÐžÑ‚Ñ‡ÐµÑ‚ Ñ‚Ð¾Ñ‡ÐºÐ¸">
                 <Download size={18} />
               </button>
-              <button type="button" className="secondary-action" onClick={() => exportExcel("all")} aria-label="Все точки" title="Все точки">
+              <button type="button" className="secondary-action" onClick={() => exportExcel("all")} aria-label="Ð’ÑÐµ Ñ‚Ð¾Ñ‡ÐºÐ¸" title="Ð’ÑÐµ Ñ‚Ð¾Ñ‡ÐºÐ¸">
                 <Download size={18} />
               </button>
             </div>
@@ -2509,18 +2543,18 @@ export default function Home() {
 
           <details className="directory-panel">
             <summary>
-              Справочники
+              Ð¡Ð¿Ñ€Ð°Ð²Ð¾Ñ‡Ð½Ð¸ÐºÐ¸
               <ChevronDown size={16} />
             </summary>
 
             <div className="directory-section">
               <div className="panel-title">
-                <strong>Точки</strong>
+                <strong>Ð¢Ð¾Ñ‡ÐºÐ¸</strong>
                 <span>{state.points.filter((point) => point.active).length}</span>
               </div>
               <div className="inline-add-form">
-                <input value={newPointName} onChange={(event) => setNewPointName(event.target.value)} placeholder="Новая точка" />
-                <button type="button" onClick={addPoint} aria-label="Добавить точку">
+                <input value={newPointName} onChange={(event) => setNewPointName(event.target.value)} placeholder="ÐÐ¾Ð²Ð°Ñ Ñ‚Ð¾Ñ‡ÐºÐ°" />
+                <button type="button" onClick={addPoint} aria-label="Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ñ‚Ð¾Ñ‡ÐºÑƒ">
                   <Plus size={18} />
                 </button>
               </div>
@@ -2529,9 +2563,9 @@ export default function Home() {
                   <input value={point.name} onChange={(event) => updatePoint(point.id, { name: event.target.value })} />
                   <label className="mini-toggle">
                     <input type="checkbox" checked={point.active} onChange={(event) => updatePoint(point.id, { active: event.target.checked })} />
-                    Активна
+                    ÐÐºÑ‚Ð¸Ð²Ð½Ð°
                   </label>
-                  <button type="button" onClick={() => removePoint(point.id)} aria-label="Удалить точку">
+                  <button type="button" onClick={() => removePoint(point.id)} aria-label="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ñ‚Ð¾Ñ‡ÐºÑƒ">
                     <X size={15} />
                   </button>
                 </div>
@@ -2540,11 +2574,11 @@ export default function Home() {
 
             <div className="directory-section">
               <div className="panel-title">
-                <strong>Водители</strong>
+                <strong>Ð’Ð¾Ð´Ð¸Ñ‚ÐµÐ»Ð¸</strong>
                 <span>{state.drivers.filter((driver) => driver.active).length}</span>
               </div>
               <div className="driver-add-form">
-                <input value={newDriver.name} onChange={(event) => setNewDriver((current) => ({ ...current, name: event.target.value }))} placeholder="Имя водителя" />
+                <input value={newDriver.name} onChange={(event) => setNewDriver((current) => ({ ...current, name: event.target.value }))} placeholder="Ð˜Ð¼Ñ Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»Ñ" />
                 <select value={newDriver.pointId} onChange={(event) => setNewDriver((current) => ({ ...current, pointId: event.target.value }))}>
                   {state.points.filter((point) => point.active).map((point) => (
                     <option key={point.id} value={point.id}>
@@ -2552,7 +2586,7 @@ export default function Home() {
                     </option>
                   ))}
                 </select>
-                <button type="button" onClick={addDriver} aria-label="Добавить водителя">
+                <button type="button" onClick={addDriver} aria-label="Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»Ñ">
                   <Plus size={18} />
                 </button>
               </div>
@@ -2568,9 +2602,9 @@ export default function Home() {
                   </select>
                   <label className="mini-toggle">
                     <input type="checkbox" checked={driver.active} onChange={(event) => updateDriver(driver.id, { active: event.target.checked })} />
-                    Активен
+                    ÐÐºÑ‚Ð¸Ð²ÐµÐ½
                   </label>
-                  <button type="button" onClick={() => removeDriver(driver.id)} aria-label="Удалить водителя">
+                  <button type="button" onClick={() => removeDriver(driver.id)} aria-label="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ð²Ð¾Ð´Ð¸Ñ‚ÐµÐ»Ñ">
                     <X size={15} />
                   </button>
                 </div>
@@ -2579,30 +2613,30 @@ export default function Home() {
 
             <div className="directory-section">
               <div className="panel-title">
-                <strong>Товары</strong>
+                <strong>Ð¢Ð¾Ð²Ð°Ñ€Ñ‹</strong>
                 <span>{state.products.filter((product) => product.active).length}</span>
               </div>
               <div className="product-add-form">
-                <input value={newProduct.name} onChange={(event) => setNewProduct((current) => ({ ...current, name: event.target.value }))} placeholder="Название" />
-                <input inputMode="decimal" value={newProduct.price} onChange={(event) => setNewProduct((current) => ({ ...current, price: event.target.value }))} placeholder="Цена" />
-                <input inputMode="decimal" value={newProduct.norm} onChange={(event) => setNewProduct((current) => ({ ...current, norm: event.target.value }))} placeholder="Норма" />
-                <input value={newProduct.category} onChange={(event) => setNewProduct((current) => ({ ...current, category: event.target.value }))} placeholder="Категория" />
-                <button type="button" onClick={addProduct} aria-label="Добавить товар">
+                <input value={newProduct.name} onChange={(event) => setNewProduct((current) => ({ ...current, name: event.target.value }))} placeholder="ÐÐ°Ð·Ð²Ð°Ð½Ð¸Ðµ" />
+                <input inputMode="decimal" value={newProduct.price} onChange={(event) => setNewProduct((current) => ({ ...current, price: event.target.value }))} placeholder="Ð¦ÐµÐ½Ð°" />
+                <input inputMode="decimal" value={newProduct.norm} onChange={(event) => setNewProduct((current) => ({ ...current, norm: event.target.value }))} placeholder="ÐÐ¾Ñ€Ð¼Ð°" />
+                <input value={newProduct.category} onChange={(event) => setNewProduct((current) => ({ ...current, category: event.target.value }))} placeholder="ÐšÐ°Ñ‚ÐµÐ³Ð¾Ñ€Ð¸Ñ" />
+                <button type="button" onClick={addProduct} aria-label="Ð”Ð¾Ð±Ð°Ð²Ð¸Ñ‚ÑŒ Ñ‚Ð¾Ð²Ð°Ñ€">
                   <Plus size={18} />
                 </button>
               </div>
               <label className="search-field compact">
                 <Search size={17} />
-                <input value={productAdminSearch} onChange={(event) => setProductAdminSearch(event.target.value)} placeholder="Поиск в товарах" aria-label="Поиск в товарах" />
+                <input value={productAdminSearch} onChange={(event) => setProductAdminSearch(event.target.value)} placeholder="ÐŸÐ¾Ð¸ÑÐº Ð² Ñ‚Ð¾Ð²Ð°Ñ€Ð°Ñ…" aria-label="ÐŸÐ¾Ð¸ÑÐº Ð² Ñ‚Ð¾Ð²Ð°Ñ€Ð°Ñ…" />
               </label>
               <div className="product-admin-list">
                 {adminProducts.map((product) => (
                   <div className="product-admin-row" key={product.id}>
                     <div className="order-controls">
-                      <button type="button" onClick={() => moveProductShelf(product.id, -1)} aria-label="Выше">
+                      <button type="button" onClick={() => moveProductShelf(product.id, -1)} aria-label="Ð’Ñ‹ÑˆÐµ">
                         <ArrowUp size={14} />
                       </button>
-                      <button type="button" onClick={() => moveProductShelf(product.id, 1)} aria-label="Ниже">
+                      <button type="button" onClick={() => moveProductShelf(product.id, 1)} aria-label="ÐÐ¸Ð¶Ðµ">
                         <ArrowDown size={14} />
                       </button>
                     </div>
@@ -2610,12 +2644,12 @@ export default function Home() {
                     <input inputMode="decimal" value={num(product.price)} onChange={(event) => updateProduct(product.id, { price: parseNumber(event.target.value) })} />
                     <input inputMode="decimal" value={num(product.norm)} onChange={(event) => updateProduct(product.id, { norm: parseNumber(event.target.value) })} />
                     <input value={product.category} onChange={(event) => updateProduct(product.id, { category: event.target.value })} />
-                    <input inputMode="numeric" value={String(product.shelfOrder ?? "")} onChange={(event) => updateProduct(product.id, { shelfOrder: parseNumber(event.target.value) || undefined })} aria-label="Порядок полки" />
+                    <input inputMode="numeric" value={String(product.shelfOrder ?? "")} onChange={(event) => updateProduct(product.id, { shelfOrder: parseNumber(event.target.value) || undefined })} aria-label="ÐŸÐ¾Ñ€ÑÐ´Ð¾Ðº Ð¿Ð¾Ð»ÐºÐ¸" />
                     <input
                       inputMode="decimal"
                       value={num(product.quantityStep ?? 1)}
                       onChange={(event) => updateProduct(product.id, { quantityStep: Math.max(0.01, parseNumber(event.target.value) || 1) })}
-                      aria-label="Шаг"
+                      aria-label="Ð¨Ð°Ð³"
                     />
                     <label className="mini-toggle">
                       <input type="checkbox" checked={Boolean(product.allowDecimal)} onChange={(event) => updateProduct(product.id, { allowDecimal: event.target.checked, quantityStep: event.target.checked ? product.quantityStep ?? 0.5 : 1 })} />
@@ -2623,9 +2657,9 @@ export default function Home() {
                     </label>
                     <label className="mini-toggle">
                       <input type="checkbox" checked={product.active} onChange={(event) => updateProduct(product.id, { active: event.target.checked })} />
-                      Актив.
+                      ÐÐºÑ‚Ð¸Ð².
                     </label>
-                    <button type="button" onClick={() => removeProduct(product.id)} aria-label="Удалить товар">
+                    <button type="button" onClick={() => removeProduct(product.id)} aria-label="Ð£Ð´Ð°Ð»Ð¸Ñ‚ÑŒ Ñ‚Ð¾Ð²Ð°Ñ€">
                       <X size={15} />
                     </button>
                   </div>
@@ -2637,21 +2671,21 @@ export default function Home() {
       )}
 
       {progressOpen && (
-        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Статус заполнения">
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Ð¡Ñ‚Ð°Ñ‚ÑƒÑ Ð·Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ">
           <div className="scanner-sheet progress-sheet">
             <div className="screen-head">
               <div>
-                <span className="overline">Заполнение</span>
+                <span className="overline">Ð—Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ðµ</span>
                 <h2>{filledCount} / {inventoryLines.length}</h2>
               </div>
-              <button type="button" className="icon-button" onClick={() => setProgressOpen(false)} aria-label="Закрыть список заполнения">
+              <button type="button" className="icon-button" onClick={() => setProgressOpen(false)} aria-label="Ð—Ð°ÐºÑ€Ñ‹Ñ‚ÑŒ ÑÐ¿Ð¸ÑÐ¾Ðº Ð·Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¸Ñ">
                 <X size={20} />
               </button>
             </div>
             <div className="progress-columns">
               <div>
                 <div className="panel-title">
-                  <strong>Не заполнено</strong>
+                  <strong>ÐÐµ Ð·Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¾</strong>
                   <span>{missingLines.length}</span>
                 </div>
                 <div className="progress-list">
@@ -2669,7 +2703,7 @@ export default function Home() {
               </div>
               <div>
                 <div className="panel-title">
-                  <strong>Заполнено</strong>
+                  <strong>Ð—Ð°Ð¿Ð¾Ð»Ð½ÐµÐ½Ð¾</strong>
                   <span>{filledLines.length}</span>
                 </div>
                 <div className="progress-list">
@@ -2690,11 +2724,11 @@ export default function Home() {
         </div>
       )}
 
-      {!isFocusMode && <nav className="bottom-nav" aria-label="Основное меню">
-        <NavButton icon={<HomeIcon size={20} />} label="Главная" active={activeTab === "home"} onClick={() => setActiveTab("home")} />
+      {!isFocusMode && <nav className="bottom-nav" aria-label="ÐžÑÐ½Ð¾Ð²Ð½Ð¾Ðµ Ð¼ÐµÐ½ÑŽ">
+        <NavButton icon={<HomeIcon size={20} />} label="Ð“Ð»Ð°Ð²Ð½Ð°Ñ" active={activeTab === "home"} onClick={() => setActiveTab("home")} />
         <NavButton
           icon={<Package size={20} />}
-          label="Инвент."
+          label="Ð˜Ð½Ð²ÐµÐ½Ñ‚."
           active={activeTab === "inventory"}
           badge={missingCount}
           onClick={() => {
@@ -2702,13 +2736,13 @@ export default function Home() {
             setActiveTab("inventory");
           }}
         />
-        <NavButton icon={<PackagePlus size={20} />} label="Приход" active={activeTab === "receipts"} onClick={() => setActiveTab("receipts")} />
-        <NavButton icon={<Truck size={20} />} label="Перемещ." active={activeTab === "transfers"} onClick={() => setActiveTab("transfers")} />
-        <NavButton icon={<WalletCards size={20} />} label="Финансы" active={activeTab === "finance"} onClick={() => setActiveTab("finance")} />
-        <NavButton icon={<MoreHorizontal size={20} />} label="Еще" active={activeTab === "more"} onClick={() => setActiveTab("more")} />
+        <NavButton icon={<PackagePlus size={20} />} label="ÐŸÑ€Ð¸Ñ…Ð¾Ð´" active={activeTab === "receipts"} onClick={() => setActiveTab("receipts")} />
+        <NavButton icon={<Truck size={20} />} label="ÐŸÐµÑ€ÐµÐ¼ÐµÑ‰." active={activeTab === "transfers"} onClick={() => setActiveTab("transfers")} />
+        <NavButton icon={<WalletCards size={20} />} label="Ð¤Ð¸Ð½Ð°Ð½ÑÑ‹" active={activeTab === "finance"} onClick={() => setActiveTab("finance")} />
+        <NavButton icon={<MoreHorizontal size={20} />} label="Ð•Ñ‰Ðµ" active={activeTab === "more"} onClick={() => setActiveTab("more")} />
       </nav>}
 
-      {false && lastSaved && <span className="save-stamp">Автосохранение</span>}
+      {false && lastSaved && <span className="save-stamp">ÐÐ²Ñ‚Ð¾ÑÐ¾Ñ…Ñ€Ð°Ð½ÐµÐ½Ð¸Ðµ</span>}
     </main>
   );
 }
@@ -2730,7 +2764,7 @@ function ProductPickButton({ line, onClick }: { line: ReportLine; onClick: () =>
       <div>
         <strong>{line.rowNumber}. {line.product.name}</strong>
         <span>
-          Было {num(line.previousRest)} · {lineStatusText(line)}
+          Ð‘Ñ‹Ð»Ð¾ {num(line.previousRest)} Â· {lineStatusText(line)}
         </span>
       </div>
       <ArrowRight size={18} />
@@ -2761,7 +2795,7 @@ function TopList({ title, items }: { title: string; items: Array<{ label: string
           </div>
         ))
       ) : (
-        <div className="empty-state">Нет данных</div>
+        <div className="empty-state">ÐÐµÑ‚ Ð´Ð°Ð½Ð½Ñ‹Ñ…</div>
       )}
     </div>
   );
