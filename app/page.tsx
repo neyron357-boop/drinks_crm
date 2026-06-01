@@ -844,7 +844,7 @@ export default function Home() {
   function loadReportPhoto(file: File | Blob) {
     setImageUrl(file, setReportPhotoUrl, reportPhotoUrl);
     commitReportPhotoTransform({ scale: 1, x: 0, y: 0 });
-    setNotice("Фото отчета добавлено.");
+    if (activeTab !== "inventory" || inventoryView !== "quick") setNotice("Фото отчета добавлено.");
   }
 
   function loadReceiptPhoto(file: File | Blob) {
@@ -1857,6 +1857,34 @@ export default function Home() {
                 <span className="quick-counter">
                   {quickIndex + 1} / {quickLines.length}
                 </span>
+                <div className="quick-photo-tools no-ios-callout" aria-label="Действия с фото">
+                  <button type="button" className="quick-photo-tool no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => reportPhotoInputRef.current?.click()} aria-label="Галерея" title="Галерея">
+                    <ImagePlus size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    className="quick-photo-tool no-ios-callout tap-target"
+                    onContextMenu={(e) => e.preventDefault()}
+                    onClick={reportClipboardState === "found" ? pasteReportPhoto : checkClipboardForReportImage}
+                    aria-label="Вставить из буфера"
+                    title="Вставить из буфера"
+                  >
+                    <ClipboardPaste size={18} />
+                  </button>
+                  <button type="button" className="quick-photo-tool no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={resetReportPhotoPosition} aria-label="Сбросить фото" title="Сбросить фото">
+                    <RefreshCcw size={18} />
+                  </button>
+                  <button
+                    type="button"
+                    className="quick-photo-tool no-ios-callout tap-target"
+                    onContextMenu={(e) => e.preventDefault()}
+                    onClick={() => setSpeechEnabled((current) => !current)}
+                    aria-label={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
+                    title={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
+                  >
+                    {speechEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                  </button>
+                </div>
               </div>
 
               <input ref={reportPhotoInputRef} className="hidden-file-input" type="file" accept="image/*" onChange={handleReportPhotoFile} />
@@ -1886,30 +1914,6 @@ export default function Home() {
                       <span>Фото отчета</span>
                     </div>
                   )}
-                </div>
-                <div className="photoToolbar">
-                  <button type="button" onClick={() => reportPhotoInputRef.current?.click()} aria-label="Галерея" title="Галерея">
-                    <ImagePlus size={20} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={reportClipboardState === "found" ? pasteReportPhoto : checkClipboardForReportImage}
-                    aria-label="Вставить из буфера"
-                    title="Вставить из буфера"
-                  >
-                    <ClipboardPaste size={20} />
-                  </button>
-                  <button type="button" onClick={resetReportPhotoPosition} aria-label="Сбросить фото" title="Сбросить фото">
-                    <RefreshCcw size={20} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSpeechEnabled((current) => !current)}
-                    aria-label={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
-                    title={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
-                  >
-                    {speechEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-                  </button>
                 </div>
               </div>
 
