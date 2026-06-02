@@ -30,7 +30,9 @@
 html,
 body {
   height: 100%;
+  max-width: 100%;
   overflow: hidden;
+  overscroll-behavior-x: none;
 }
 
 html {
@@ -189,11 +191,22 @@ label {
 .app-shell {
   position: relative;
   width: min(100%, 480px);
+  max-width: 100%;
   height: 100%;
   margin: 0 auto;
   padding: 10px 12px calc(var(--bottom-nav-height) + 22px);
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior-x: none;
+  scrollbar-width: none;
+  touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
+}
+
+.app-shell::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .app-shell.focus-mode {
@@ -388,8 +401,11 @@ label {
 
 .screen {
   display: flex;
+  min-width: 0;
+  max-width: 100%;
   flex-direction: column;
   gap: 12px;
+  overflow-x: hidden;
 }
 
 .screen-head {
@@ -2322,7 +2338,7 @@ label {
 
 .mini-toggle {
   display: inline-flex;
-  min-width: auto;
+  min-width: 0;
   flex-direction: row;
   align-items: center;
   gap: 5px;
@@ -2471,6 +2487,29 @@ label {
 }
 
 @media (max-width: 759px) {
+  .point-strip,
+  .favorite-row,
+  .driver-tabs {
+    flex-wrap: wrap;
+    margin-right: 0;
+    margin-left: 0;
+    padding-right: 0;
+    padding-left: 0;
+    overflow-x: hidden;
+  }
+
+  .point-strip button,
+  .driver-tabs button {
+    min-width: 0;
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  .favorite-row button {
+    min-width: 0;
+    max-width: none;
+    flex: 1 1 calc(50% - 4px);
+  }
+
   .inventory-list {
     overflow-x: visible;
   }
@@ -2520,6 +2559,70 @@ label {
   .report-card,
   .close-panel {
     min-width: 0;
+  }
+
+  .driver-add-form,
+  .product-add-form,
+  .driver-admin-row,
+  .product-admin-row {
+    overflow-x: hidden;
+  }
+
+  .driver-add-form {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+  }
+
+  .product-add-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) 44px;
+  }
+
+  .product-add-form input:first-child,
+  .product-add-form input:nth-child(4) {
+    grid-column: 1 / -1;
+  }
+
+  .product-add-form button {
+    grid-column: 3;
+  }
+
+  .admin-row,
+  .driver-admin-row {
+    grid-template-columns: minmax(0, 1fr) 38px;
+  }
+
+  .admin-row > input,
+  .admin-row > select,
+  .driver-admin-row > input,
+  .driver-admin-row > select {
+    grid-column: 1 / -1;
+  }
+
+  .admin-row > .mini-toggle,
+  .driver-admin-row > .mini-toggle {
+    grid-column: 1;
+  }
+
+  .admin-row > button,
+  .driver-admin-row > button {
+    grid-column: 2;
+    grid-row: auto;
+  }
+
+  .product-admin-row {
+    grid-template-columns: 54px minmax(0, 1fr) minmax(0, 1fr) 38px;
+  }
+
+  .product-admin-row > input:first-of-type,
+  .product-admin-row > input:nth-of-type(4) {
+    grid-column: 1 / -1;
+  }
+
+  .product-admin-row > .mini-toggle {
+    justify-content: flex-start;
+    min-width: 0;
+    min-height: 38px;
+    overflow: hidden;
+    white-space: nowrap;
   }
 }
 
