@@ -313,7 +313,6 @@ export default function Home() {
   const [reportPhotoUrl, setReportPhotoUrl] = useState("");
   const [reportPhotoTransform, setReportPhotoTransform] = useState<PhotoTransform>({ scale: 1, x: 0, y: 0 });
   const [speechEnabled, setSpeechEnabled] = useState(true);
-  const [isOverrideConfirmed, setIsOverrideConfirmed] = useState(false);
   const [receiptPhotoUrl, setReceiptPhotoUrl] = useState("");
   const [receiptOcrBusy, setReceiptOcrBusy] = useState(false);
   const [receiptCandidates, setReceiptCandidates] = useState<ReceiptCandidate[]>([]);
@@ -642,10 +641,6 @@ export default function Home() {
       if (animationFrameIdRef.current) window.cancelAnimationFrame(animationFrameIdRef.current);
     };
   }, []);
-
-  useEffect(() => {
-    setIsOverrideConfirmed(false);
-  }, [quickIndex]);
 
   useEffect(() => {
     const activeIds = new Set(inventoryLines.map((line) => line.product.id));
@@ -1399,7 +1394,6 @@ export default function Home() {
     quickDraftRef.current = normalized;
     if (input && input.value !== normalized) input.value = normalized;
     setQuickPreviewRest(parsed);
-    setIsOverrideConfirmed(false);
     scheduleQuickCommit(quickLine.product.id, parsed);
   }
 
@@ -1411,7 +1405,6 @@ export default function Home() {
     quickDraftRef.current = formatted;
     if (quickInputRef.current) quickInputRef.current.value = formatted;
     setQuickPreviewRest(next);
-    setIsOverrideConfirmed(false);
     scheduleQuickCommit(quickLine.product.id, next);
   }
 
@@ -1441,7 +1434,6 @@ export default function Home() {
     quickDraftRef.current = normalized;
     if (quickInputRef.current) quickInputRef.current.value = normalized;
     setQuickPreviewRest(parsed);
-    setIsOverrideConfirmed(false);
     scheduleQuickCommit(quickLine.product.id, parsed);
   }
 
@@ -1523,11 +1515,6 @@ export default function Home() {
 
   function goNext() {
     flushQuickCommit();
-    if (quickLine && typeof quickPreviewRest === "number" && quickPreviewRest > quickLine.available && !isOverrideConfirmed) {
-      setIsOverrideConfirmed(true);
-      setNotice("Остаток больше доступного. Нажмите Далее еще раз для подтверждения.");
-      return;
-    }
     if (quickIndex < quickLines.length - 1) {
       setQuickIndex((current) => current + 1);
       return;
