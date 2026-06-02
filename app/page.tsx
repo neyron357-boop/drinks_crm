@@ -8,7 +8,6 @@ import {
   ArrowUp,
   CheckCircle2,
   ChevronDown,
-  ClipboardPaste,
   Download,
   Eraser,
   ImageDown,
@@ -72,7 +71,6 @@ type CategoryId = "spirits" | "beer" | "wine" | "sparkling" | "premium";
 type InventoryView = "quick" | "list";
 type LineTone = "empty" | "done" | "warn";
 type ServerCheck = { status: "idle" | "checking" | "ok" | "error"; message: string };
-type ClipboardImageState = "idle" | "checking" | "found" | "empty" | "error";
 type PhotoTransform = { scale: number; x: number; y: number };
 type ReceiptCandidate = {
   id: string;
@@ -313,14 +311,10 @@ export default function Home() {
   const [serverCheck, setServerCheck] = useState<ServerCheck>({ status: "idle", message: "Проверка не запускалась" });
   const [uiSoundEnabled, setUiSoundEnabled] = useState(true);
   const [reportPhotoUrl, setReportPhotoUrl] = useState("");
-  const [reportClipboardState, setReportClipboardState] = useState<ClipboardImageState>("idle");
-  const [reportClipboardBlob, setReportClipboardBlob] = useState<Blob | null>(null);
   const [reportPhotoTransform, setReportPhotoTransform] = useState<PhotoTransform>({ scale: 1, x: 0, y: 0 });
   const [speechEnabled, setSpeechEnabled] = useState(true);
   const [isOverrideConfirmed, setIsOverrideConfirmed] = useState(false);
   const [receiptPhotoUrl, setReceiptPhotoUrl] = useState("");
-  const [receiptClipboardState, setReceiptClipboardState] = useState<ClipboardImageState>("idle");
-  const [receiptClipboardBlob, setReceiptClipboardBlob] = useState<Blob | null>(null);
   const [receiptOcrBusy, setReceiptOcrBusy] = useState(false);
   const [receiptCandidates, setReceiptCandidates] = useState<ReceiptCandidate[]>([]);
   const [receiptIgnoredLines, setReceiptIgnoredLines] = useState<string[]>([]);
@@ -411,18 +405,6 @@ export default function Home() {
       navigator.serviceWorker.register("/sw.js").catch(() => undefined);
     }
   }, []);
-
-  useEffect(() => {
-    if (activeTab === "inventory" && inventoryView === "quick") {
-      checkClipboardForReportImage();
-    }
-  }, [activeTab, inventoryView]);
-
-  useEffect(() => {
-    if (activeTab === "receipts") {
-      checkClipboardForReceiptImage();
-    }
-  }, [activeTab]);
 
   const currentReport = useMemo(
     () => getReport(state, selectedDate, selectedPointId) ?? createEmptyReport(selectedDate, selectedPointId, selectedDriverId, state.products),
@@ -798,47 +780,10 @@ export default function Home() {
     oscillator.stop(context.currentTime + 0.05);
   }
 
-  async function readClipboardImage() {
-    const read = (navigator.clipboard as Clipboard & { read?: () => Promise<ClipboardItem[]> } | undefined)?.read;
-    if (!read) return null;
-    const items = await read.call(navigator.clipboard);
-    for (const item of items) {
-      const imageType = item.types.find((type) => type.startsWith("image/"));
-      if (imageType) return item.getType(imageType);
-    }
-    return null;
-  }
-
   function setImageUrl(blob: Blob, setter: (url: string) => void, currentUrl: string) {
     const nextUrl = URL.createObjectURL(blob);
     if (currentUrl) URL.revokeObjectURL(currentUrl);
     setter(nextUrl);
-  }
-
-  async function checkClipboardForReportImage() {
-    if (reportClipboardState === "checking") return;
-    setReportClipboardState("checking");
-    try {
-      const blob = await readClipboardImage();
-      setReportClipboardBlob(blob);
-      setReportClipboardState(blob ? "found" : "empty");
-    } catch {
-      setReportClipboardBlob(null);
-      setReportClipboardState("error");
-    }
-  }
-
-  async function checkClipboardForReceiptImage() {
-    if (receiptClipboardState === "checking") return;
-    setReceiptClipboardState("checking");
-    try {
-      const blob = await readClipboardImage();
-      setReceiptClipboardBlob(blob);
-      setReceiptClipboardState(blob ? "found" : "empty");
-    } catch {
-      setReceiptClipboardBlob(null);
-      setReceiptClipboardState("error");
-    }
   }
 
   function loadReportPhoto(file: File | Blob) {
@@ -865,20 +810,6 @@ export default function Home() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (file) loadReceiptPhoto(file);
-  }
-
-  function pasteReportPhoto() {
-    if (!reportClipboardBlob) return;
-    loadReportPhoto(reportClipboardBlob);
-    setReportClipboardBlob(null);
-    setReportClipboardState("idle");
-  }
-
-  function pasteReceiptPhoto() {
-    if (!receiptClipboardBlob) return;
-    loadReceiptPhoto(receiptClipboardBlob);
-    setReceiptClipboardBlob(null);
-    setReceiptClipboardState("idle");
   }
 
   function clampPhotoTransform(transform: PhotoTransform): PhotoTransform {
@@ -1887,16 +1818,6 @@ export default function Home() {
                   <button type="button" className="quick-photo-tool no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => reportPhotoInputRef.current?.click()} aria-label="Галерея" title="Галерея">
                     <ImagePlus size={18} />
                   </button>
-                  <button
-                    type="button"
-                    className="quick-photo-tool no-ios-callout tap-target"
-                    onContextMenu={(e) => e.preventDefault()}
-                    onClick={reportClipboardState === "found" ? pasteReportPhoto : checkClipboardForReportImage}
-                    aria-label="Вставить из буфера"
-                    title="Вставить из буфера"
-                  >
-                    <ClipboardPaste size={18} />
-                  </button>
                   <button type="button" className="quick-photo-tool no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={resetReportPhotoPosition} aria-label="Сбросить фото" title="Сбросить фото">
                     <RefreshCcw size={18} />
                   </button>
@@ -2270,18 +2191,9 @@ export default function Home() {
               <button type="button" onClick={() => receiptPhotoInputRef.current?.click()} aria-label="Галерея" title="Галерея">
                 <ImagePlus size={18} />
               </button>
-              <button
-                type="button"
-                onClick={receiptClipboardState === "found" ? pasteReceiptPhoto : checkClipboardForReceiptImage}
-                aria-label="Вставить из буфера"
-                title="Вставить из буфера"
-              >
-                <ClipboardPaste size={18} />
-              </button>
               <button type="button" onClick={runReceiptOcr} disabled={!receiptPhotoUrl || receiptOcrBusy} aria-label="OCR" title="OCR">
                 <Search size={18} />
               </button>
-              {receiptClipboardState === "found" && <span>Найдено изображение в буфере</span>}
             </div>
           </div>
 
