@@ -1286,8 +1286,11 @@ export default function Home() {
     try {
       const imported = await importExcelReport(state, file, { date: selectedDate, mode: importMode });
       setState(imported.state);
+      const importedDate = imported.result.importedDates[0] ?? selectedDate;
+      if (importedDate !== selectedDate) setSelectedDate(importedDate);
+      const warningText = imported.result.warnings.length ? ` ${imported.result.warnings.join(" ")}` : "";
       setNotice(
-        `Импорт готов: создано ${imported.result.createdReports}, обновлено ${imported.result.updatedReports}.`
+        `Импорт готов за ${shortDate(importedDate)}: создано ${imported.result.createdReports}, обновлено ${imported.result.updatedReports}.${warningText}`
       );
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Не удалось импортировать шаблон.");
