@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 
-const allowedInputTypes = new Set(["text", "search", "email", "tel", "url", "password", "number"]);
 const textControlSelector = 'textarea, input, [contenteditable="true"], [contenteditable="plaintext-only"]';
 const tapSurfaceSelector = [
   "button",
@@ -18,25 +17,23 @@ function closestTextControl(element: HTMLElement | null) {
   return element?.closest(textControlSelector) as HTMLElement | null;
 }
 
-function isRealTextField(element: HTMLElement | null) {
-  const candidate = closestTextControl(element);
-  if (!candidate) return false;
-
-  if (candidate instanceof HTMLTextAreaElement) {
-    return !candidate.readOnly && !candidate.disabled;
-  }
-
-  if (candidate instanceof HTMLInputElement) {
-    const type = (candidate.getAttribute("type") ?? "text").toLowerCase();
-    return allowedInputTypes.has(type) && !candidate.readOnly && !candidate.disabled;
-  }
-
-  return candidate.isContentEditable;
-}
-
 function clearSelection() {
   const selection = window.getSelection();
   if (selection && !selection.isCollapsed) selection.removeAllRanges();
+}
+
+function collapseTextControlSelection(element: HTMLElement | null) {
+  const candidate = closestTextControl(element);
+  if (!candidate) return;
+
+  if (candidate instanceof HTMLInputElement || candidate instanceof HTMLTextAreaElement) {
+    try {
+      const position = candidate.value.length;
+      candidate.setSelectionRange(position, position);
+    } catch {
+      // Some native input types, for example date/number on mobile, do not expose selection ranges.
+    }
+  }
 }
 
 function blurActiveTextControl() {
@@ -48,17 +45,32 @@ function blurActiveTextControl() {
 export function IosCalloutGuard() {
   useEffect(() => {
     const blockCallout = (event: Event) => {
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      if (isRealTextField(target)) return;
       clearSelection();
+      collapseTextControlSelection(event.target instanceof HTMLElement ? event.target : null);
       event.preventDefault();
     };
 
     const prepareTap = (event: Event) => {
       const target = event.target instanceof HTMLElement ? event.target : null;
-      if (!target || isRealTextField(target)) return;
       clearSelection();
-      if (target.closest(tapSurfaceSelector)) blurActiveTextControl();
+      collapseTextControlSelection(document.activeElement instanceof HTMLElement ? document.activeElement : null);
+      if (!target) return;
+      if (target.closest(tapSurfaceSelector) || !closestTextControl(target)) blurActiveTextControl();
+    };
+
+    const collapseFocusedSelection = (event: Event) => {
+      window.setTimeout(() => {
+        clearSelection();
+        collapseTextControlSelection(event.target instanceof HTMLElement ? event.target : null);
+      }, 0);
+    };
+
+    const blockPasteInput = (event: Event) => {
+      if (!(event instanceof InputEvent)) return;
+      if (event.inputType !== "insertFromPaste" && event.inputType !== "insertFromDrop") return;
+      clearSelection();
+      collapseTextControlSelection(event.target instanceof HTMLElement ? event.target : null);
+      event.preventDefault();
     };
 
     document.addEventListener("pointerdown", prepareTap, true);
@@ -66,6 +78,14 @@ export function IosCalloutGuard() {
     document.addEventListener("mousedown", prepareTap, true);
     document.addEventListener("contextmenu", blockCallout, true);
     document.addEventListener("selectstart", blockCallout, true);
+    document.addEventListener("selectionchange", clearSelection, true);
+    document.addEventListener("dragstart", blockCallout, true);
+    document.addEventListener("copy", blockCallout, true);
+    document.addEventListener("cut", blockCallout, true);
+    document.addEventListener("paste", blockCallout, true);
+    document.addEventListener("beforeinput", blockPasteInput, true);
+    document.addEventListener("focusin", collapseFocusedSelection, true);
+    document.addEventListener("select", collapseFocusedSelection, true);
 
     return () => {
       document.removeEventListener("pointerdown", prepareTap, true);
@@ -73,6 +93,14 @@ export function IosCalloutGuard() {
       document.removeEventListener("mousedown", prepareTap, true);
       document.removeEventListener("contextmenu", blockCallout, true);
       document.removeEventListener("selectstart", blockCallout, true);
+      document.removeEventListener("selectionchange", clearSelection, true);
+      document.removeEventListener("dragstart", blockCallout, true);
+      document.removeEventListener("copy", blockCallout, true);
+      document.removeEventListener("cut", blockCallout, true);
+      document.removeEventListener("paste", blockCallout, true);
+      document.removeEventListener("beforeinput", blockPasteInput, true);
+      document.removeEventListener("focusin", collapseFocusedSelection, true);
+      document.removeEventListener("select", collapseFocusedSelection, true);
     };
   }, []);
 
