@@ -11,6 +11,108 @@ import { createEmptyReport, reportId } from "./seed";
 import { getTemplatePoint, TEMPLATE_POINTS } from "./template-data";
 import type { AppState, CashColumnKey, CashInput, DailyReport, ImportMode, ImportResult } from "./types";
 
+const MONTH_NAMES: Record<string, number> = {
+  january: 1,
+  jan: 1,
+  январь: 1,
+  января: 1,
+  февраль: 2,
+  февраля: 2,
+  february: 2,
+  feb: 2,
+  март: 3,
+  марта: 3,
+  march: 3,
+  mar: 3,
+  апрель: 4,
+  апреля: 4,
+  april: 4,
+  apr: 4,
+  май: 5,
+  мая: 5,
+  may: 5,
+  июнь: 6,
+  июня: 6,
+  june: 6,
+  jun: 6,
+  июль: 7,
+  июля: 7,
+  july: 7,
+  jul: 7,
+  август: 8,
+  августа: 8,
+  august: 8,
+  aug: 8,
+  сентябрь: 9,
+  сентября: 9,
+  september: 9,
+  sep: 9,
+  sept: 9,
+  октябрь: 10,
+  октября: 10,
+  october: 10,
+  oct: 10,
+  ноябрь: 11,
+  ноября: 11,
+  november: 11,
+  nov: 11,
+  декабрь: 12,
+  декабря: 12,
+  december: 12,
+  dec: 12
+};
+
+function isoDate(year: number, month: number, day: number) {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function normalizeFileName(fileName: string) {
+  return fileName
+    .replace(/\.[^.]+$/, "")
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+export function inferReportDateFromFileName(fileName: string, fallbackDate: string) {
+  const normalized = normalizeFileName(fileName);
+  const fallbackYear = Number(fallbackDate.slice(0, 4)) || new Date().getFullYear();
+
+  const yearFirst = normalized.match(/\b(19\d{2}|20\d{2})\s+(\d{1,2})\s+(\d{1,2})\b/);
+  if (yearFirst) {
+    const [, year, month, day] = yearFirst;
+    const parsed = isoDate(Number(year), Number(month), Number(day));
+    if (parsed) return parsed;
+  }
+
+  const dayFirst = normalized.match(/\b(\d{1,2})\s+(\d{1,2})\s+(19\d{2}|20\d{2})\b/);
+  if (dayFirst) {
+    const [, day, month, year] = dayFirst;
+    const parsed = isoDate(Number(year), Number(month), Number(day));
+    if (parsed) return parsed;
+  }
+
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  const explicitYear = tokens.map(Number).find((value) => value >= 1900 && value <= 2099) ?? fallbackYear;
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const month = MONTH_NAMES[tokens[index]];
+    if (!month) continue;
+
+    const adjacent = [tokens[index + 1], tokens[index - 1], ...tokens].filter(Boolean);
+    const day = adjacent.map(Number).find((value) => value >= 1 && value <= 31);
+    if (!day) continue;
+
+    const parsed = isoDate(explicitYear, month, day);
+    if (parsed) return parsed;
+  }
+
+  return null;
+}
+
 function readCashColumn(
   worksheet: Worksheet,
   columnKey: CashColumnKey,
@@ -150,8 +252,12 @@ export async function importExcelReport(
     warnings: []
   };
 
-  const date = options.date;
+  const inferredDate = inferReportDateFromFileName(file.name, options.date);
+  const date = inferredDate ?? options.date;
   if (!result.importedDates.includes(date)) result.importedDates.push(date);
+  if (inferredDate && inferredDate !== options.date) {
+    result.warnings.push(`Дата импорта взята из имени файла: ${date}`);
+  }
 
   for (const templatePoint of TEMPLATE_POINTS) {
     const pointExists = nextState.points.some((point) => point.id === templatePoint.id && point.active);

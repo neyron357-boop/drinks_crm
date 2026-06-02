@@ -50,6 +50,14 @@ export function IosCalloutGuard() {
       event.preventDefault();
     };
 
+    const blockSelection = (event: Event) => {
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      clearSelection();
+      collapseTextControlSelection(target);
+      if (target?.closest(tapSurfaceSelector) || closestTextControl(target)) return;
+      event.preventDefault();
+    };
+
     const prepareTap = (event: Event) => {
       const target = event.target instanceof HTMLElement ? event.target : null;
       clearSelection();
@@ -77,7 +85,7 @@ export function IosCalloutGuard() {
     document.addEventListener("touchstart", prepareTap, true);
     document.addEventListener("mousedown", prepareTap, true);
     document.addEventListener("contextmenu", blockCallout, true);
-    document.addEventListener("selectstart", blockCallout, true);
+    document.addEventListener("selectstart", blockSelection, true);
     document.addEventListener("selectionchange", clearSelection, true);
     document.addEventListener("dragstart", blockCallout, true);
     document.addEventListener("copy", blockCallout, true);
@@ -92,7 +100,7 @@ export function IosCalloutGuard() {
       document.removeEventListener("touchstart", prepareTap, true);
       document.removeEventListener("mousedown", prepareTap, true);
       document.removeEventListener("contextmenu", blockCallout, true);
-      document.removeEventListener("selectstart", blockCallout, true);
+      document.removeEventListener("selectstart", blockSelection, true);
       document.removeEventListener("selectionchange", clearSelection, true);
       document.removeEventListener("dragstart", blockCallout, true);
       document.removeEventListener("copy", blockCallout, true);
