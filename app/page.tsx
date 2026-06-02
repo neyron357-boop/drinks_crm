@@ -47,7 +47,7 @@ import { createExcelReportFile } from "./lib/excel";
 import { importExcelReport } from "./lib/excel-import";
 import { formatDecimal, parseDecimal, parseOptionalDecimal } from "./lib/numbers";
 import { productSortNumber } from "./lib/product-order";
-import { parseReceiptOcrText, receiptProductConfidence } from "./lib/receipt-ocr";
+import { parseReceiptOcrText } from "./lib/receipt-ocr";
 import { createEmptyReport, createInitialState, emptyCash, reportId } from "./lib/seed";
 import { loadState, saveState } from "./lib/storage";
 import type {
@@ -909,31 +909,20 @@ export default function Home() {
     commitReportPhotoTransform({ scale: 1, x: 0, y: 0 });
   }
 
-  function matchReceiptProduct(productText: string) {
-    let best: { product: Product; confidence: number } | null = null;
-    for (const product of state.products.filter((item) => item.active)) {
-      const confidence = receiptProductConfidence(productText, product.name);
-      if (!best || confidence > best.confidence) best = { product, confidence };
-    }
-    return best && best.confidence >= 60 ? best : null;
-  }
-
   function buildReceiptCandidates(text: string): ReceiptCandidate[] {
-    const parsed = parseReceiptOcrText(text);
-    setReceiptIgnoredLines(parsed.ignoredLines);
+    const parsed = parseReceiptOcrText(text, state.products);
+    setReceiptIgnoredLines(parsed.ignoredRows);
     setReceiptIgnoredOpen(false);
 
-    return parsed.items.map((line) => {
-      const match = matchReceiptProduct(line.productText);
-      const confidence = match?.confidence ?? 0;
+    return parsed.map((line) => {
       return {
         id: makeId(),
-        rawText: line.rawText,
-        productText: line.productText,
-        productId: confidence >= 60 ? match?.product.id ?? "" : "",
+        rawText: line.rawLine,
+        productText: line.rawProductName,
+        productId: line.matchedProductId ?? "",
         quantity: String(line.quantity),
-        confidence,
-        confirmed: confidence >= 85
+        confidence: line.confidence,
+        confirmed: !line.needsReview
       };
     });
   }
