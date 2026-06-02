@@ -13,6 +13,7 @@ import {
   ImageDown,
   ImagePlus,
   Home as HomeIcon,
+  LayoutList,
   Lock,
   Minus,
   MoreHorizontal,
@@ -22,6 +23,7 @@ import {
   RefreshCcw,
   Search,
   Settings,
+  Table2,
   Truck,
   Upload,
   Volume2,
@@ -30,7 +32,7 @@ import {
   Wifi,
   X
 } from "lucide-react";
-import { startTransition, useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { startTransition, useEffect, useMemo, useRef, useState, type ChangeEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   calculateCash,
   calculateCashColumns,
@@ -40,7 +42,8 @@ import {
   canCloseReport,
   countProblems,
   getReport,
-  getReportWarnings
+  getReportWarnings,
+  getTransferMovement
 } from "./lib/calculations";
 import { applyCarryoverAfterClose } from "./lib/carryover";
 import { createExcelReportFile } from "./lib/excel";
@@ -68,7 +71,9 @@ import type {
 
 type Tab = "home" | "inventory" | "receipts" | "transfers" | "finance" | "more";
 type CategoryId = "spirits" | "beer" | "wine" | "sparkling" | "premium";
-type InventoryView = "quick" | "list";
+type InventoryView = "quick" | "list" | "table";
+type TableFilter = "all" | "changed" | "errors" | "sales" | "incoming" | "shortage" | "request";
+type TableField = "price" | "norm" | "incoming" | "movement" | "homeRest" | "request";
 type LineTone = "empty" | "done" | "warn";
 type ServerCheck = { status: "idle" | "checking" | "ok" | "error"; message: string };
 type PhotoTransform = { scale: number; x: number; y: number };
@@ -124,6 +129,27 @@ const categoryDefs: Array<{
 ];
 
 const favoriteNeedles = ["ABSOLUT", "JACK DANIELS", "CHIVAS", "HEINEKEN", "CORONA"];
+
+const tableFilterDefs: Array<{ id: TableFilter; label: string }> = [
+  { id: "all", label: "Все" },
+  { id: "changed", label: "Измененные" },
+  { id: "errors", label: "Ошибки" },
+  { id: "sales", label: "С продажами" },
+  { id: "incoming", label: "С приходом" },
+  { id: "shortage", label: "Недостача" },
+  { id: "request", label: "Заявка" }
+];
+
+const tableEditableFields: TableField[] = ["price", "norm", "incoming", "movement", "homeRest", "request"];
+
+const tableFieldLabels: Record<TableField, string> = {
+  price: "Цена",
+  norm: "Норма",
+  incoming: "Приход",
+  movement: "Перемещение",
+  homeRest: "Остаток дома",
+  request: "Заявка"
+};
 
 type CashNumberField =
   | "discounts"
@@ -286,8 +312,12 @@ export default function Home() {
   const [state, setState] = useState<AppState>(() => createInitialState());
   const [hydrated, setHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("inventory");
-  const [inventoryView, setInventoryView] = useState<InventoryView>("quick");
+  const [inventoryView, setInventoryView] = useState<InventoryView>("table");
   const [quickIndex, setQuickIndex] = useState(0);
+  const [tableFilter, setTableFilter] = useState<TableFilter>("all");
+  const [selectedTableProductId, setSelectedTableProductId] = useState("");
+  const [expandedTableRows, setExpandedTableRows] = useState<string[]>([]);
+  const [editedTableCells, setEditedTableCells] = useState<Record<string, boolean>>({});
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [selectedPointId, setSelectedPointId] = useState("jvc");
   const [selectedDriverId, setSelectedDriverId] = useState("driver-farrukh");
@@ -327,6 +357,7 @@ export default function Home() {
   });
 
   const quickInputRef = useRef<HTMLInputElement>(null);
+  const tableSearchRef = useRef<HTMLInputElement>(null);
   const quickDraftRef = useRef("");
   const quickCommitTimerRef = useRef<number | undefined>(undefined);
   const pendingQuickCommitRef = useRef<{ productId: string; value: number | undefined } | null>(null);
@@ -459,6 +490,36 @@ export default function Home() {
   }, [inventoryLines, search]);
   const visibleInventoryLines = search ? searchResults : inventoryLines;
 
+  const tableLines = useMemo(() => {
+    return visibleInventoryLines.filter((line) => {
+      const item = currentReport.items[line.product.id];
+      const edited = Object.keys(editedTableCells).some((key) => key.startsWith(`${line.product.id}:`));
+      const changed =
+        edited ||
+        Boolean(item?.incoming) ||
+        Boolean(item?.movement) ||
+        typeof item?.homeRest === "number" ||
+        Boolean(item?.extraRequest);
+      const hasError = line.sale < -0.001 || line.warnings.some((warning) => warning.severity !== "info");
+      const hasRequest = line.request + line.extraRequest > 0.001;
+
+      if (tableFilter === "changed") return changed;
+      if (tableFilter === "errors") return hasError;
+      if (tableFilter === "sales") return line.sale > 0.001;
+      if (tableFilter === "incoming") return line.incoming > 0.001;
+      if (tableFilter === "shortage") return line.sale < -0.001;
+      if (tableFilter === "request") return hasRequest;
+      return true;
+    });
+  }, [currentReport.items, editedTableCells, tableFilter, visibleInventoryLines]);
+
+  const selectedTableLine = useMemo(
+    () => tableLines.find((line) => line.product.id === selectedTableProductId) ?? tableLines[0] ?? null,
+    [selectedTableProductId, tableLines]
+  );
+  const tableSoldQuantity = useMemo(() => parseNumber(String(inventoryLines.reduce((total, line) => total + Math.max(line.sale, 0), 0))), [inventoryLines]);
+  const tableRevenue = useMemo(() => parseNumber(String(inventoryLines.reduce((total, line) => total + line.amount, 0))), [inventoryLines]);
+
   const receiptLines = useMemo(() => {
     const query = receiptSearch.trim().toLowerCase();
     return query
@@ -588,6 +649,23 @@ export default function Home() {
   useEffect(() => {
     if (quickIndex >= quickLines.length) setQuickIndex(Math.max(quickLines.length - 1, 0));
   }, [quickIndex, quickLines.length]);
+
+  useEffect(() => {
+    if (selectedTableProductId && inventoryLines.some((line) => line.product.id === selectedTableProductId)) return;
+    setSelectedTableProductId(inventoryLines[0]?.product.id ?? "");
+  }, [inventoryLines, selectedTableProductId]);
+
+  useEffect(() => {
+    const handleFind = (event: KeyboardEvent) => {
+      if (activeTab !== "inventory" || inventoryView !== "table") return;
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "f") return;
+      event.preventDefault();
+      tableSearchRef.current?.focus();
+      tableSearchRef.current?.select();
+    };
+    window.addEventListener("keydown", handleFind);
+    return () => window.removeEventListener("keydown", handleFind);
+  }, [activeTab, inventoryView]);
 
   useEffect(() => {
     if (activeTab !== "inventory" || inventoryView !== "quick") return;
@@ -1337,6 +1415,122 @@ export default function Home() {
     }));
   }
 
+  function tableCellKey(productId: string, field: TableField) {
+    return `${productId}:${field}`;
+  }
+
+  function tableRequestValue(line: ReportLine) {
+    return parseNumber(String(line.request + line.extraRequest));
+  }
+
+  function isTableLineError(line: ReportLine) {
+    return line.sale < -0.001 || (typeof line.homeRest === "number" && line.homeRest > line.available) || line.warnings.some((warning) => warning.severity !== "info");
+  }
+
+  function isTableLineChanged(line: ReportLine) {
+    const item = currentReport.items[line.product.id];
+    return (
+      Object.keys(editedTableCells).some((key) => key.startsWith(`${line.product.id}:`)) ||
+      Boolean(item?.incoming) ||
+      Boolean(item?.movement) ||
+      typeof item?.homeRest === "number" ||
+      Boolean(item?.extraRequest)
+    );
+  }
+
+  function markTableCellEdited(productId: string, field: TableField) {
+    setEditedTableCells((current) => ({ ...current, [tableCellKey(productId, field)]: true }));
+  }
+
+  function tableCellChanged(productId: string, field: TableField) {
+    return Boolean(editedTableCells[tableCellKey(productId, field)]);
+  }
+
+  function tableInputValue(line: ReportLine, field: TableField) {
+    if (field === "price") return num(line.product.price);
+    if (field === "norm") return num(line.product.norm);
+    if (field === "incoming") return formatQuantity(line.incoming, line.product);
+    if (field === "movement") return num(line.movement);
+    if (field === "homeRest") return formatQuantity(line.homeRest, line.product);
+    return formatQuantity(tableRequestValue(line), line.product);
+  }
+
+  function updateTableCell(line: ReportLine, field: TableField, value: string) {
+    if (!canEditReport) return;
+    markTableCellEdited(line.product.id, field);
+
+    if (field === "price") {
+      updateProduct(line.product.id, { price: parseNumber(value) });
+      return;
+    }
+
+    if (field === "norm") {
+      updateProduct(line.product.id, { norm: parseNumber(value) });
+      return;
+    }
+
+    if (field === "incoming") {
+      updateItem(line.product.id, { incoming: parseQuantity(value, line.product) });
+      return;
+    }
+
+    if (field === "movement") {
+      const transferMovement = getTransferMovement(state, selectedDate, selectedPointId, line.product.id);
+      updateItem(line.product.id, { movement: parseNumber(value) - transferMovement });
+      return;
+    }
+
+    if (field === "homeRest") {
+      const homeRest = parseOptionalQuantity(value, line.product);
+      updateItem(line.product.id, { homeRest, currentRest: homeRest });
+      return;
+    }
+
+    const requested = parseQuantity(value, line.product);
+    updateItem(line.product.id, { extraRequest: Math.max(0, parseNumber(String(requested - line.request))) });
+  }
+
+  function focusTableCell(productId: string, field: TableField) {
+    const key = tableCellKey(productId, field);
+    window.requestAnimationFrame(() => {
+      const matchingInputs = Array.from(document.querySelectorAll<HTMLInputElement>("[data-table-cell]")).filter((item) => item.dataset.tableCell === key);
+      const input = matchingInputs.find((item) => item.offsetParent !== null) ?? matchingInputs[0];
+      input?.focus();
+      input?.select();
+    });
+  }
+
+  function handleTableCellKeyDown(event: ReactKeyboardEvent<HTMLInputElement>, line: ReportLine, field: TableField) {
+    if (event.key !== "Enter" && event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    const currentIndex = tableLines.findIndex((item) => item.product.id === line.product.id);
+    const nextIndex = event.key === "ArrowUp" ? Math.max(0, currentIndex - 1) : Math.min(tableLines.length - 1, currentIndex + 1);
+    const nextLine = tableLines[nextIndex];
+    if (!nextLine) return;
+    setSelectedTableProductId(nextLine.product.id);
+    focusTableCell(nextLine.product.id, field);
+  }
+
+  function toggleExpandedTableRow(productId: string) {
+    setExpandedTableRows((current) => (current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId]));
+  }
+
+  function renderTableInput(line: ReportLine, field: TableField, className = "") {
+    return (
+      <input
+        data-table-cell={tableCellKey(line.product.id, field)}
+        className={`${tableCellChanged(line.product.id, field) ? "changed" : ""} ${className}`.trim()}
+        inputMode={field === "price" || field === "norm" || allowsDecimalProduct(line.product) ? "decimal" : "numeric"}
+        value={tableInputValue(line, field)}
+        onFocus={() => setSelectedTableProductId(line.product.id)}
+        onChange={(event) => updateTableCell(line, field, event.target.value)}
+        onKeyDown={(event) => handleTableCellKeyDown(event, line, field)}
+        disabled={!canEditReport}
+        aria-label={`${tableFieldLabels[field]} ${line.product.name}`}
+      />
+    );
+  }
+
   function removeProduct(productId: string) {
     const hasHistory = state.reports.some((report) => Boolean(report.items[productId]));
     setState((current) => ({
@@ -1508,7 +1702,7 @@ export default function Home() {
       setQuickIndex((current) => current + 1);
       return;
     }
-    setInventoryView("list");
+    setInventoryView("table");
     setNotice("Инвентаризация заполнена.");
   }
 
@@ -1568,7 +1762,7 @@ export default function Home() {
       setActiveTab("finance");
       return;
     }
-    setInventoryView("list");
+    setInventoryView("table");
     setActiveTab("inventory");
     if (missingCount > 0 || problemCount > 0) setProgressOpen(true);
   }
@@ -1618,9 +1812,10 @@ export default function Home() {
     receiptCandidates.some((candidate) => candidate.productId !== "__skip__") &&
     receiptCandidates.every((candidate) => !receiptCandidateHasProblem(candidate));
   const isFocusMode = activeTab === "inventory" && inventoryView === "quick";
+  const isTableMode = activeTab === "inventory" && inventoryView === "table";
 
   return (
-    <main className={isFocusMode ? "app-shell focus-mode" : "app-shell"}>
+    <main className={isFocusMode ? "app-shell focus-mode" : isTableMode ? "app-shell table-mode" : "app-shell"}>
       {!isFocusMode && (
         <header className="app-header">
           <label className="point-select no-ios-callout tap-target">
@@ -1703,18 +1898,264 @@ export default function Home() {
 
       {activeTab === "inventory" && (
         <section className="screen inventory-screen">
-          {inventoryView === "list" && (
-            <>
-              <label className="search-field">
+          {inventoryView !== "quick" && (
+            <div className="inventory-table-toolbar no-ios-callout">
+              <label className="search-field table-search">
                 <Search size={18} />
                 <input
+                  ref={tableSearchRef}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   placeholder="Поиск товара"
                   aria-label="Поиск товара"
                 />
               </label>
+              <div className="view-switch inventory-mode-switch" aria-label="Режим остатков">
+                <button type="button" className="tap-target" onClick={() => startQuick()}>
+                  <Package size={16} />
+                  <span>Быстрый ввод</span>
+                </button>
+                <button type="button" className={inventoryView === "table" ? "active tap-target" : "tap-target"} onClick={() => setInventoryView("table")}>
+                  <Table2 size={16} />
+                  <span>Таблица</span>
+                </button>
+                <button type="button" className={inventoryView === "list" ? "active tap-target" : "tap-target"} onClick={() => setInventoryView("list")}>
+                  <LayoutList size={16} />
+                  <span>Список</span>
+                </button>
+              </div>
+              <button type="button" className="secondary-action table-export-button tap-target" onClick={() => exportExcel("all")} aria-label="Экспорт Excel" title="Экспорт Excel">
+                <Download size={16} />
+                <span>Excel</span>
+              </button>
+            </div>
+          )}
 
+          {inventoryView === "table" && (
+            <>
+              <div className="table-filter-bar no-ios-callout">
+                {tableFilterDefs.map((filter) => (
+                  <button
+                    type="button"
+                    key={filter.id}
+                    className={tableFilter === filter.id ? "active tap-target" : "tap-target"}
+                    onClick={() => setTableFilter(filter.id)}
+                  >
+                    {filter.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="table-workspace">
+                <aside className="table-side-panel no-ios-callout">
+                  <button type="button" className="tap-target" onClick={() => startQuick()}>
+                    <Package size={16} />
+                    <span>Быстрый ввод</span>
+                  </button>
+                  <button type="button" className="tap-target" onClick={() => setInventoryView("list")}>
+                    <LayoutList size={16} />
+                    <span>Список</span>
+                  </button>
+                  <button type="button" className="tap-target" onClick={() => setActiveTab("receipts")}>
+                    <PackagePlus size={16} />
+                    <span>Приход</span>
+                  </button>
+                  <button type="button" className="tap-target" onClick={() => setActiveTab("finance")}>
+                    <WalletCards size={16} />
+                    <span>Финансы</span>
+                  </button>
+                </aside>
+
+                <div className="table-main">
+                  <div className="inventory-table-scroll no-ios-callout">
+                    <table className="inventory-table">
+                      <thead>
+                        <tr>
+                          <th>№</th>
+                          <th>Товар</th>
+                          <th>Цена</th>
+                          <th>Норма</th>
+                          <th>Было</th>
+                          <th>Приход</th>
+                          <th>Перемещение</th>
+                          <th>Остаток дома</th>
+                          <th>Продано</th>
+                          <th>Сумма</th>
+                          <th>Заявка</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tableLines.map((line) => {
+                          const rowError = isTableLineError(line);
+                          const rowChanged = isTableLineChanged(line);
+                          const rowSelected = selectedTableLine?.product.id === line.product.id;
+                          return (
+                            <tr
+                              key={line.product.id}
+                              className={`${rowError ? "error" : ""} ${rowChanged ? "edited" : ""} ${rowSelected ? "selected" : ""}`.trim()}
+                              onClick={() => setSelectedTableProductId(line.product.id)}
+                            >
+                              <td className="table-number-cell">{line.rowNumber}</td>
+                              <td className="table-product-cell">
+                                <button type="button" onClick={(event) => { event.stopPropagation(); startQuick(line.product.id); }}>
+                                  <span className={`dot ${lineTone(line)}`} />
+                                  <strong>{line.product.name}</strong>
+                                </button>
+                              </td>
+                              <td className="table-input-cell">{renderTableInput(line, "price")}</td>
+                              <td className="table-input-cell">{renderTableInput(line, "norm")}</td>
+                              <td className="table-number-value">{num(line.previousRest)}</td>
+                              <td className="table-input-cell">{renderTableInput(line, "incoming")}</td>
+                              <td className="table-input-cell">{renderTableInput(line, "movement")}</td>
+                              <td className="table-input-cell">{renderTableInput(line, "homeRest")}</td>
+                              <td className={line.sale < -0.001 ? "table-number-value bad-text" : "table-number-value"}>
+                                {typeof line.homeRest === "number" ? num(line.sale) : "-"}
+                              </td>
+                              <td className={line.amount < -0.001 ? "table-money-cell bad-text" : "table-money-cell"}>
+                                {typeof line.homeRest === "number" ? currency(line.amount) : "-"}
+                              </td>
+                              <td className="table-input-cell">{renderTableInput(line, "request")}</td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {tableLines.length === 0 && <div className="empty-state">Нет товаров по фильтру</div>}
+                  </div>
+
+                  <div className="inventory-table-mobile">
+                    {tableLines.map((line) => {
+                      const expanded = expandedTableRows.includes(line.product.id);
+                      const rowError = isTableLineError(line);
+                      return (
+                        <article
+                          key={line.product.id}
+                          className={`${rowError ? "table-mobile-row error" : "table-mobile-row"} ${isTableLineChanged(line) ? "edited" : ""}`}
+                        >
+                          <div
+                            className="table-mobile-summary"
+                            onClick={() => {
+                              setSelectedTableProductId(line.product.id);
+                              toggleExpandedTableRow(line.product.id);
+                            }}
+                          >
+                            <div className="mobile-product-title">
+                              <b>{line.rowNumber}</b>
+                              <strong>{line.product.name}</strong>
+                            </div>
+                            <div>
+                              <span>Было</span>
+                              <strong>{num(line.previousRest)}</strong>
+                            </div>
+                            <div className="mobile-rest-edit" onClick={(event) => event.stopPropagation()}>
+                              <span>Остаток</span>
+                              {renderTableInput(line, "homeRest", "mobile-home-rest")}
+                            </div>
+                            <div>
+                              <span>Продано</span>
+                              <strong className={line.sale < -0.001 ? "bad-text" : ""}>{typeof line.homeRest === "number" ? num(line.sale) : "-"}</strong>
+                            </div>
+                            <div>
+                              <span>Сумма</span>
+                              <strong>{typeof line.homeRest === "number" ? currency(line.amount) : "-"}</strong>
+                            </div>
+                          </div>
+                          {expanded && (
+                            <div className="table-mobile-edit-grid">
+                              {tableEditableFields.filter((field) => field !== "homeRest").map((field) => (
+                                <label key={field}>
+                                  {tableFieldLabels[field]}
+                                  {renderTableInput(line, field)}
+                                </label>
+                              ))}
+                              {line.warnings.some((warning) => warning.severity !== "info") && (
+                                <div className="table-mobile-warning">
+                                  <AlertTriangle size={16} />
+                                  <span>{line.warnings.filter((warning) => warning.severity !== "info").map((warning) => warning.message).join("; ")}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })}
+                    {tableLines.length === 0 && <div className="empty-state">Нет товаров по фильтру</div>}
+                  </div>
+                </div>
+
+                <aside className="table-detail-panel no-ios-callout">
+                  {selectedTableLine ? (
+                    <>
+                      <div className="table-detail-title">
+                        <span>{selectedTableLine.rowNumber}</span>
+                        <strong>{selectedTableLine.product.name}</strong>
+                      </div>
+                      <ReportRow label="Было" value={num(selectedTableLine.previousRest)} />
+                      <ReportRow label="Доступно" value={num(selectedTableLine.available)} />
+                      <ReportRow label="Продано" value={typeof selectedTableLine.homeRest === "number" ? num(selectedTableLine.sale) : "-"} tone={selectedTableLine.sale < -0.001 ? "bad" : "neutral"} />
+                      <ReportRow label="Сумма" value={typeof selectedTableLine.homeRest === "number" ? currency(selectedTableLine.amount) : "-"} tone={selectedTableLine.amount < -0.001 ? "bad" : "neutral"} />
+                      <ReportRow label="Заявка" value={formatQuantity(tableRequestValue(selectedTableLine), selectedTableLine.product) || "0"} />
+                      {selectedTableLine.warnings.some((warning) => warning.severity !== "info") ? (
+                        <div className="table-detail-warnings">
+                          {selectedTableLine.warnings.filter((warning) => warning.severity !== "info").map((warning) => (
+                            <span key={warning.code}>
+                              <AlertTriangle size={15} />
+                              {warning.message}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="table-detail-ok">
+                          <CheckCircle2 size={16} />
+                          <span>Ошибок нет</span>
+                        </div>
+                      )}
+                      <button type="button" className="secondary-wide tap-target" onClick={() => startQuick(selectedTableLine.product.id)}>
+                        <Package size={16} />
+                        Быстрый ввод
+                      </button>
+                    </>
+                  ) : (
+                    <div className="empty-state">Выберите строку</div>
+                  )}
+                </aside>
+              </div>
+
+              <div className="table-totals-bar no-ios-callout">
+                <div>
+                  <span>Всего продаж</span>
+                  <strong>{num(tableSoldQuantity)}</strong>
+                </div>
+                <div>
+                  <span>Выручка</span>
+                  <strong>{currency(tableRevenue)}</strong>
+                </div>
+                <div>
+                  <span>Сдали</span>
+                  <strong>{currency(cashTotal.handedOver)}</strong>
+                </div>
+                <div>
+                  <span>Скидки</span>
+                  <strong>{currency(financeTotals.discounts)}</strong>
+                </div>
+                <div>
+                  <span>Расходы</span>
+                  <strong>{currency(financeTotals.expenses)}</strong>
+                </div>
+                <div>
+                  <span>Недостача</span>
+                  <strong className={cashTotal.shortageOrPlus < 0 ? "bad-text" : "good-text"}>{currency(cashTotal.shortageOrPlus)}</strong>
+                </div>
+                <div>
+                  <span>Разница</span>
+                  <strong className={cashTotal.shortageOrPlus < 0 ? "bad-text" : "good-text"}>{currency(cashTotal.shortageOrPlus)}</strong>
+                </div>
+              </div>
+            </>
+          )}
+
+          {inventoryView === "list" && (
+            <>
               <details className="bulk-panel no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}>
                 <summary>
                   <span>Массово</span>
@@ -1784,7 +2225,7 @@ export default function Home() {
           {inventoryView === "quick" && (
             <div className="quick-fill">
               <div className="quick-top">
-                <button type="button" className="icon-button no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => setInventoryView("list")} aria-label="Вернуться к списку">
+                <button type="button" className="icon-button no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => setInventoryView("table")} aria-label="Вернуться к списку">
                   <ArrowLeft size={18} />
                 </button>
                 <span className="quick-counter">
@@ -2857,7 +3298,7 @@ export default function Home() {
           active={activeTab === "inventory"}
           badge={missingCount}
           onClick={() => {
-            setInventoryView("list");
+            setInventoryView("table");
             setActiveTab("inventory");
           }}
         />
