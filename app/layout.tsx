@@ -3,8 +3,8 @@ import "./globals.css";
 import { IosCalloutGuard } from "./IosCalloutGuard";
 
 export const metadata: Metadata = {
-  title: "Учет продаж напитков",
-  description: "Ежедневный учет продаж напитков по точкам доставки",
+  title: "Drinks CRM",
+  description: "Рабочий терминал для учета остатков, приходов, перемещений, финансов и закрытия дня",
   manifest: "/manifest.webmanifest"
 };
 
@@ -15,7 +15,7 @@ export const viewport: Viewport = {
   userScalable: false,
   viewportFit: "cover",
   interactiveWidget: "resizes-content",
-  themeColor: "#16324a"
+  themeColor: "#101216"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
