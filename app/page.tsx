@@ -1954,7 +1954,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  <label className="rest-input no-ios-callout">
+                  <div className="rest-input no-ios-callout">
                     <span>ОСТАТОК</span>
                     <div className="rest-stepper solo">
                       <input
@@ -1996,7 +1996,7 @@ export default function Home() {
                         </span>
                       )}
                     </div>
-                  </label>
+                  </div>
 
                   <div className="quick-mini-info no-ios-callout">
                     <div>
