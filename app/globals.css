@@ -933,6 +933,84 @@ td select {
   padding: 0 12px 12px;
 }
 
+.shortage-share-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.shortage-share-panel.danger {
+  border-color: rgba(255, 107, 107, 0.5);
+}
+
+.shortage-share-panel.clean {
+  border-color: rgba(67, 197, 158, 0.44);
+}
+
+.shortage-share-panel.danger .primary-action {
+  background: var(--red);
+  color: #ffffff;
+}
+
+.shortage-share-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.shortage-point-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.shortage-point-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #141a22;
+  padding: 10px 11px;
+}
+
+.shortage-point-row strong,
+.shortage-point-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shortage-point-row span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.shortage-point-row.danger {
+  border-color: rgba(255, 107, 107, 0.4);
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.shortage-point-row.danger span {
+  color: #ffb4b4;
+}
+
+.shortage-point-row.clean {
+  border-color: rgba(67, 197, 158, 0.35);
+  background: rgba(67, 197, 158, 0.08);
+}
+
+.shortage-point-row.clean span {
+  color: #9af0d0;
+}
+
+.shortage-point-row.muted {
+  opacity: 0.72;
+}
+
 .warning-panel {
   border-color: rgba(242, 184, 75, 0.48);
 }
@@ -1089,6 +1167,7 @@ td select {
 
   .stats-grid,
   .finance-hero,
+  .shortage-share-grid,
   .bottom-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1179,6 +1258,7 @@ td select {
 
   .stats-grid,
   .finance-hero,
+  .shortage-share-grid,
   .bottom-summary {
     grid-template-columns: 1fr;
   }

@@ -9,6 +9,7 @@ import {
   Download,
   FileSpreadsheet,
   Home,
+  ImageDown,
   ImagePlus,
   MoreHorizontal,
   Package,
@@ -71,6 +72,41 @@ type ProductDraft = {
   allowDecimal: boolean;
 };
 
+type ShortageImageDriver = {
+  columnKey: CashColumnKey;
+  driverName: string;
+  shouldHandOver: number;
+  handedOver: number;
+  shortage: number;
+};
+
+type ShortageImagePoint = {
+  pointId: string;
+  pointName: string;
+  hasReport: boolean;
+  total: number;
+  drivers: ShortageImageDriver[];
+};
+
+type ShortageImageData = {
+  date: string;
+  total: number;
+  affectedPoints: number;
+  affectedDrivers: number;
+  points: ShortageImagePoint[];
+};
+
+type FileShareData = {
+  files?: File[];
+  title?: string;
+  text?: string;
+};
+
+type FileShareNavigator = Navigator & {
+  canShare?: (data: FileShareData) => boolean;
+  share?: (data: FileShareData) => Promise<void>;
+};
+
 const todayIso = () => {
   const now = new Date();
   const year = now.getFullYear();
@@ -83,6 +119,207 @@ const shortDate = (date: string) => date.split("-").reverse().join(".");
 const num = (value: number | undefined) => formatDecimal(value);
 const currency = (value: number) => `${value.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} AED`;
 const makeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+function buildShortageImageData(state: AppState, date: string): ShortageImageData {
+  const points = state.points
+    .filter((point) => point.active)
+    .map<ShortageImagePoint>((point) => {
+      const report = getReport(state, date, point.id);
+      const drivers =
+        report
+          ? CASH_COLUMN_KEYS.map((columnKey) => {
+              const cash = calculateCash(safeCash(report, columnKey));
+              return {
+                columnKey,
+                driverName: cash.driverName || `Колонка ${columnKey}`,
+                shouldHandOver: cash.shouldHandOver,
+                handedOver: cash.handedOver,
+                shortage: money(Math.abs(Math.min(cash.shortageOrPlus, 0)))
+              };
+            }).filter((driver) => driver.shortage > 0.01)
+          : [];
+
+      return {
+        pointId: point.id,
+        pointName: point.name,
+        hasReport: Boolean(report),
+        drivers,
+        total: money(drivers.reduce((sum, driver) => sum + driver.shortage, 0))
+      };
+    });
+
+  return {
+    date,
+    points,
+    total: money(points.reduce((sum, point) => sum + point.total, 0)),
+    affectedPoints: points.filter((point) => point.total > 0.01).length,
+    affectedDrivers: points.reduce((sum, point) => sum + point.drivers.length, 0)
+  };
+}
+
+function drawRoundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  radius: number,
+  fill: string,
+  stroke?: string
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+function truncateCanvasText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let next = text;
+  while (next.length > 1 && ctx.measureText(`${next}...`).width > maxWidth) {
+    next = next.slice(0, -1);
+  }
+  return `${next}...`;
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Не удалось создать PNG."));
+    }, "image/png");
+  });
+}
+
+async function createShortageImageBlob(data: ShortageImageData) {
+  await document.fonts?.ready;
+
+  const width = 1080;
+  const pointHeights = data.points.map((point) => 112 + Math.max(1, point.drivers.length) * 82);
+  const height = Math.max(760, 338 + pointHeights.reduce((sum, value) => sum + value, 0) + 74);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas недоступен.");
+
+  const hasShortage = data.total > 0.01;
+  const danger = "#b91c1c";
+  const dangerSoft = "#fee2e2";
+  const good = "#0f766e";
+  const goodSoft = "#dcfce7";
+  const ink = "#111827";
+  const muted = "#64748b";
+  const line = "#d8dee8";
+
+  ctx.fillStyle = hasShortage ? "#fff7f7" : "#f6fffb";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.fillStyle = hasShortage ? danger : good;
+  ctx.fillRect(0, 0, width, 196);
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "900 62px Segoe UI, Arial, sans-serif";
+  ctx.fillText(hasShortage ? "НЕДОСТАЧА ПО КАССЕ" : "НЕДОСТАЧ НЕТ", 54, 86);
+  ctx.font = "700 30px Segoe UI, Arial, sans-serif";
+  ctx.fillText(`Дата: ${shortDate(data.date)}`, 58, 135);
+  ctx.font = "900 44px Segoe UI, Arial, sans-serif";
+  ctx.fillText(`ИТОГО: ${currency(data.total)}`, 58, 178);
+
+  const summaryY = 224;
+  const summaryCards = [
+    ["СУММА НЕДОСТАЧИ", currency(data.total)],
+    ["ТОЧЕК С ПРОБЛЕМОЙ", String(data.affectedPoints)],
+    ["ВОДИТЕЛЕЙ", String(data.affectedDrivers)]
+  ];
+  summaryCards.forEach(([label, value], index) => {
+    const cardWidth = 306;
+    const x = 54 + index * 342;
+    drawRoundRect(ctx, x, summaryY, cardWidth, 82, 16, "#ffffff", line);
+    ctx.fillStyle = muted;
+    ctx.font = "800 20px Segoe UI, Arial, sans-serif";
+    ctx.fillText(label, x + 22, summaryY + 30);
+    ctx.fillStyle = hasShortage && index === 0 ? danger : ink;
+    ctx.font = "900 32px Segoe UI, Arial, sans-serif";
+    ctx.fillText(value, x + 22, summaryY + 66);
+  });
+
+  let y = 342;
+  for (const point of data.points) {
+    const pointHasShortage = point.total > 0.01;
+    const cardHeight = pointHeights[data.points.indexOf(point)];
+    const tone = pointHasShortage ? danger : point.hasReport ? good : "#6b7280";
+    const soft = pointHasShortage ? dangerSoft : point.hasReport ? goodSoft : "#f1f5f9";
+
+    drawRoundRect(ctx, 54, y, 972, cardHeight, 18, "#ffffff", line);
+    ctx.fillStyle = tone;
+    ctx.fillRect(54, y, 12, cardHeight);
+    drawRoundRect(ctx, 86, y + 24, 46, 46, 23, soft);
+    ctx.fillStyle = tone;
+    ctx.font = "900 30px Segoe UI, Arial, sans-serif";
+    ctx.fillText(pointHasShortage ? "!" : point.hasReport ? "OK" : "?", 100, y + 58);
+
+    ctx.fillStyle = ink;
+    ctx.font = "900 36px Segoe UI, Arial, sans-serif";
+    ctx.fillText(truncateCanvasText(ctx, point.pointName, 520), 150, y + 54);
+    ctx.fillStyle = tone;
+    ctx.textAlign = "right";
+    ctx.font = "900 34px Segoe UI, Arial, sans-serif";
+    ctx.fillText(pointHasShortage ? `НЕДОСТАЧА ${currency(point.total)}` : point.hasReport ? "НЕДОСТАЧ НЕТ" : "НЕТ ОТЧЕТА", 990, y + 54);
+    ctx.textAlign = "left";
+
+    let rowY = y + 92;
+    if (!point.drivers.length) {
+      drawRoundRect(ctx, 86, rowY, 904, 58, 12, soft);
+      ctx.fillStyle = point.hasReport ? good : muted;
+      ctx.font = "800 25px Segoe UI, Arial, sans-serif";
+      ctx.fillText(point.hasReport ? "По этой точке недостач нет" : "По этой точке отчет за день не создан", 108, rowY + 38);
+      rowY += 76;
+    } else {
+      for (const driver of point.drivers) {
+        drawRoundRect(ctx, 86, rowY, 904, 68, 12, "#fff5f5", "#fecaca");
+        ctx.fillStyle = ink;
+        ctx.font = "900 27px Segoe UI, Arial, sans-serif";
+        ctx.fillText(truncateCanvasText(ctx, driver.driverName, 390), 108, rowY + 30);
+        ctx.fillStyle = muted;
+        ctx.font = "700 20px Segoe UI, Arial, sans-serif";
+        ctx.fillText(`Должен сдать: ${currency(driver.shouldHandOver)}    Сдал: ${currency(driver.handedOver)}`, 108, rowY + 56);
+        ctx.fillStyle = danger;
+        ctx.textAlign = "right";
+        ctx.font = "900 31px Segoe UI, Arial, sans-serif";
+        ctx.fillText(currency(driver.shortage), 966, rowY + 44);
+        ctx.textAlign = "left";
+        rowY += 82;
+      }
+    }
+
+    y += cardHeight + 18;
+  }
+
+  drawRoundRect(ctx, 54, height - 58, 972, 38, 12, hasShortage ? "#fee2e2" : "#dcfce7");
+  ctx.fillStyle = hasShortage ? danger : good;
+  ctx.font = "800 21px Segoe UI, Arial, sans-serif";
+  ctx.fillText(hasShortage ? "Проверьте кассу и внесите недостающую сумму сегодня." : "Все точки без недостач по кассе.", 78, height - 33);
+  ctx.textAlign = "right";
+  ctx.fillText("Drinks CRM", 1002, height - 33);
+  ctx.textAlign = "left";
+
+  return canvasToBlob(canvas);
+}
 
 const stockFilters: Array<{ id: StockFilter; label: string }> = [
   { id: "all", label: "Все" },
@@ -293,6 +530,7 @@ export default function HomePage() {
   );
   const allLines = useMemo(() => calculateReportLines(state, currentReport), [currentReport, state]);
   const dashboard = useMemo(() => calculateDashboard(state, selectedDate), [selectedDate, state]);
+  const shortageImageData = useMemo(() => buildShortageImageData(state, selectedDate), [selectedDate, state]);
   const reportRevenue = useMemo(() => calculateReportRevenue(state, currentReport), [currentReport, state]);
   const cashTotal = useMemo(() => calculateCashTotal(currentReport), [currentReport]);
   const warnings = useMemo(() => getReportWarnings(state, currentReport), [currentReport, state]);
@@ -421,6 +659,39 @@ export default function HomePage() {
       setNotice(`Excel выгружен за ${shortDate(selectedDate)}.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Не удалось выгрузить Excel.");
+    }
+  }
+
+  async function shareShortageImage() {
+    try {
+      setNotice("Готовлю картинку недостач...");
+      const blob = await createShortageImageBlob(shortageImageData);
+      const fileName = `nedostachi-${selectedDate}.png`;
+      const file = new File([blob], fileName, { type: "image/png" });
+      const shareData: FileShareData = {
+        files: [file],
+        title: `Недостачи ${shortDate(selectedDate)}`,
+        text:
+          shortageImageData.total > 0.01
+            ? `Недостачи за ${shortDate(selectedDate)}: ${currency(shortageImageData.total)}`
+            : `Недостач за ${shortDate(selectedDate)} нет`
+      };
+      const shareNavigator = navigator as FileShareNavigator;
+
+      if (shareNavigator.share && (!shareNavigator.canShare || shareNavigator.canShare(shareData))) {
+        await shareNavigator.share(shareData);
+        setNotice("Картинка недостач открыта для отправки.");
+        return;
+      }
+
+      downloadBlob(blob, fileName);
+      setNotice("PNG недостач скачан. Отправьте этот файл в группу.");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setNotice("Отправка картинки отменена.");
+        return;
+      }
+      setNotice(error instanceof Error ? error.message : "Не удалось создать картинку недостач.");
     }
   }
 
@@ -928,6 +1199,37 @@ export default function HomePage() {
         <Stat label="Разница" value={currency(cashTotal.shortageOrPlus)} tone={cashTotal.shortageOrPlus < 0 ? "bad" : "good"} />
       </div>
 
+      <section className={shortageImageData.total > 0.01 ? "work-panel shortage-share-panel danger" : "work-panel shortage-share-panel clean"}>
+        <SectionTitle
+          eyebrow="Для группы"
+          title={shortageImageData.total > 0.01 ? "Картинка недостач" : "Картинка статуса кассы"}
+          action={
+            <button className="primary-action compact" type="button" onClick={shareShortageImage}>
+              <ImageDown size={17} /> Отправить PNG
+            </button>
+          }
+        />
+        <div className="shortage-share-grid">
+          <Stat label="Итого недостача" value={currency(shortageImageData.total)} tone={shortageImageData.total > 0.01 ? "bad" : "good"} />
+          <Stat label="Точек" value={String(shortageImageData.affectedPoints)} tone={shortageImageData.affectedPoints ? "warn" : "good"} />
+          <Stat label="Водителей" value={String(shortageImageData.affectedDrivers)} tone={shortageImageData.affectedDrivers ? "warn" : "good"} />
+        </div>
+        <div className="shortage-point-list">
+          {shortageImageData.points.map((point) => (
+            <div key={point.pointId} className={point.total > 0.01 ? "shortage-point-row danger" : point.hasReport ? "shortage-point-row clean" : "shortage-point-row muted"}>
+              <strong>{point.pointName}</strong>
+              <span>
+                {point.total > 0.01
+                  ? `${point.drivers.length} вод. · ${currency(point.total)}`
+                  : point.hasReport
+                    ? "недостач нет"
+                    : "отчет не создан"}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <div className="driver-tabs">
         {CASH_COLUMN_KEYS.map((columnKey) => {
           const cash = safeCash(currentReport, columnKey);
@@ -1064,6 +1366,9 @@ export default function HomePage() {
           </button>
           <button type="button" onClick={goToProblem}>
             <AlertTriangle size={18} /> Найти блокер закрытия
+          </button>
+          <button type="button" onClick={shareShortageImage}>
+            <ImageDown size={18} /> Картинка недостач для группы
           </button>
         </section>
 
