@@ -436,7 +436,7 @@ export default function Home() {
   );
   const cashColumns = useMemo(() => calculateCashColumns(currentReport), [currentReport]);
   const cashTotal = useMemo(() => calculateCashTotal(currentReport), [currentReport]);
-  const reportWarningList = useMemo(() => (activeTab === "more" ? getReportWarnings(state, currentReport) : []), [activeTab, currentReport, state]);
+  const reportWarningList = useMemo(() => getReportWarnings(state, currentReport), [currentReport, state]);
   const errorWarningCount = reportWarningList.filter((warning) => warning.severity === "error").length;
   const selectedPoint = state.points.find((point) => point.id === selectedPointId);
   const canEditReport = !currentReport.closed;
@@ -1636,6 +1636,10 @@ export default function Home() {
       setNotice(`Закрытие недоступно: осталось заполнить ${missingCount} товаров.`);
       return;
     }
+    if (hasFinanceMismatch) {
+      setNotice("Нельзя закрыть день: выручка водителей не совпадает с продажами по факту.");
+      return;
+    }
     const result = canCloseReport(state, currentReport);
     if (!result.ok) {
       setNotice(`Нельзя закрыть: ${result.warnings.slice(0, 2).join("; ")}`);
@@ -1650,6 +1654,16 @@ export default function Home() {
       return applyCarryoverAfterClose(replaceReport(current, closedReport), closedReport);
     });
     setNotice("День закрыт. Остатки перенесены на следующий день.");
+  }
+
+  function goToReportCheck() {
+    if (hasFinanceMismatch || reportWarningList.some((warning) => warning.code.includes("CASH") || warning.code.includes("REVENUE"))) {
+      setActiveTab("finance");
+      return;
+    }
+    setInventoryView("list");
+    setActiveTab("inventory");
+    if (missingCount > 0 || problemCount > 0) setProgressOpen(true);
   }
 
   function reopenDay() {
@@ -1683,7 +1697,8 @@ export default function Home() {
     }
   }
 
-  const closeDisabled = currentReport.closed || missingCount > 0 || errorWarningCount > 0;
+  const hasFinanceMismatch = Math.abs(financeRevenueGap) > 0.01;
+  const closeDisabled = currentReport.closed || missingCount > 0 || errorWarningCount > 0 || hasFinanceMismatch;
   const quickTone = quickLine ? lineTone(quickLine) : "empty";
   const quickItem = quickLine ? currentReport.items[quickLine.product.id] : undefined;
   const quickPreviewSale =
@@ -1721,6 +1736,16 @@ export default function Home() {
               aria-label="Дата"
             />
           </label>
+          <button
+            type="button"
+            className={activeTab === "more" ? "header-more-button active no-ios-callout tap-target" : "header-more-button no-ios-callout tap-target"}
+            onContextMenu={(e) => e.preventDefault()}
+            onClick={() => setActiveTab("more")}
+            aria-label="Ещё"
+          >
+            <MoreHorizontal size={19} />
+            <span>Еще</span>
+          </button>
         </header>
       )}
 
@@ -1758,12 +1783,13 @@ export default function Home() {
 
           <button
             type="button"
-            className="primary-cta no-ios-callout tap-target icon-cta"
+            className="primary-cta home-primary-cta no-ios-callout tap-target"
             onClick={continueFill}
             aria-label={missingCount === 0 ? "Открыть закрытие дня" : "Продолжить заполнение"}
-            title={missingCount === 0 ? "Открыть закрытие дня" : "Продолжить"}
           >
-            {missingCount === 0 ? <CheckCircle2 size={20} /> : <ArrowRight size={20} />}
+            {missingCount === 0 ? <CheckCircle2 size={20} /> : <Package size={20} />}
+            <span>{missingCount === 0 ? "Перейти к закрытию дня" : "Продолжить заполнение"}</span>
+            <ArrowRight size={18} />
           </button>
         </section>
       )}
@@ -2107,6 +2133,7 @@ export default function Home() {
                   type="button"
                   key={line.product.id}
                   className={transferForm.productId === line.product.id ? "active" : ""}
+                  onContextMenu={(e) => e.preventDefault()}
                   onClick={() => {
                     setTransferForm((current) => ({ ...current, productId: line.product.id }));
                     setTransferSearch("");
@@ -2117,11 +2144,19 @@ export default function Home() {
               ))}
             </div>
 
+            {transferProduct && (
+              <div className="selected-transfer-product no-ios-callout">
+                <span>Выбран товар</span>
+                <strong>{transferProduct.name}</strong>
+              </div>
+            )}
+
             <div className="transfer-stepper">
-              <span>Переместить</span>
+              <span>Количество</span>
               <div>
                 <button
                   type="button"
+                  onContextMenu={(e) => e.preventDefault()}
                   onClick={() =>
                     setTransferForm((current) => {
                       const product = state.products.find((item) => item.id === current.productId);
@@ -2137,6 +2172,7 @@ export default function Home() {
                 <strong>{num(transferForm.quantity)}</strong>
                 <button
                   type="button"
+                  onContextMenu={(e) => e.preventDefault()}
                   onClick={() =>
                     setTransferForm((current) => {
                       const product = state.products.find((item) => item.id === current.productId);
@@ -2181,8 +2217,15 @@ export default function Home() {
               </label>
             </div>
 
-            <button type="button" className="primary-cta no-ios-callout tap-target icon-cta" onClick={addTransfer} disabled={!canEditReport} aria-label="Переместить" title="Переместить">
+            <button
+              type="button"
+              className="primary-cta transfer-submit no-ios-callout tap-target"
+              onContextMenu={(e) => e.preventDefault()}
+              onClick={addTransfer}
+              disabled={!canEditReport}
+            >
               <Truck size={20} />
+              <span>Переместить товар</span>
             </button>
           </div>
 
@@ -2354,9 +2397,9 @@ export default function Home() {
       {activeTab === "finance" && (
         <section className="screen finance-screen">
           <div className="finance-grid">
-            <Metric label="Продано" value={currency(revenue)} tone="neutral" />
-            <Metric label="Сдали" value={currency(cashTotal.handedOver)} tone="neutral" />
-            <Metric label="Разница" value={currency(financeRevenueGap)} tone={Math.abs(financeRevenueGap) > 0.01 ? "bad" : "good"} />
+            <Metric label="Должен сдать" value={currency(selectedCash.shouldHandOver)} tone="neutral" />
+            <Metric label="Сдал" value={currency(selectedCashInput.handedOver)} tone="neutral" />
+            <Metric label="Разница" value={currency(selectedCash.shortageOrPlus)} tone={selectedCash.shortageOrPlus < 0 ? "bad" : "good"} />
           </div>
 
           <details className="finance-more no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}>
@@ -2483,12 +2526,6 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="finance-result">
-              <span>Должен сдать</span>
-              <strong>{currency(selectedCash.shouldHandOver)}</strong>
-              <span>Разница</span>
-              <strong className={selectedCash.shortageOrPlus < 0 ? "bad-text" : "good-text"}>{currency(selectedCash.shortageOrPlus)}</strong>
-            </div>
           </div>
         </section>
       )}
@@ -2503,19 +2540,33 @@ export default function Home() {
             <Settings size={22} />
           </div>
 
-          <div className={missingCount ? "close-panel locked no-ios-callout" : "close-panel ready no-ios-callout"}>
+          <div className={closeDisabled && !currentReport.closed ? "close-panel locked no-ios-callout" : "close-panel ready no-ios-callout"}>
             <div className="close-status no-ios-callout">
-              {missingCount ? <Lock size={22} /> : <CheckCircle2 size={22} />}
+              {closeDisabled && !currentReport.closed ? <Lock size={22} /> : <CheckCircle2 size={22} />}
               <div>
                 <strong>
                   {filledCount} / {inventoryLines.length}
                 </strong>
-                <span>{missingCount ? `Осталось заполнить: ${missingCount} товаров` : "Проверка завершена"}</span>
+                <span>
+                  {missingCount
+                    ? `Осталось заполнить: ${missingCount} товаров`
+                    : hasFinanceMismatch
+                      ? "Выручка не совпадает с фактом"
+                      : errorWarningCount > 0
+                        ? "Есть ошибки проверки"
+                        : "Проверка завершена"}
+                </span>
               </div>
             </div>
             <button type="button" className="primary-cta no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={closeDay} disabled={closeDisabled}>
               Закрыть день
             </button>
+            {closeDisabled && !currentReport.closed && (
+              <button type="button" className="secondary-wide check-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={goToReportCheck}>
+                <AlertTriangle size={18} />
+                Перейти к проверке
+              </button>
+            )}
             {currentReport.closed && (
               <button type="button" className="secondary-wide no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={reopenDay}>
                 Открыть отчет снова
@@ -2589,20 +2640,36 @@ export default function Home() {
           </details>
 
           <div className="settings-panel no-ios-callout">
-            <label>
-              Дата отчета
-              <input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
-            </label>
-            <label>
-              Точка
-              <select value={selectedPointId} onChange={(event) => selectPoint(event.target.value)}>
-                {state.points.filter((point) => point.active).map((point) => (
-                  <option key={point.id} value={point.id}>
-                    {point.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="settings-group settings-group-wide">
+              <div className="panel-title">
+                <strong>Параметры отчета</strong>
+                <span>{selectedPoint?.name ?? "Точка"}</span>
+              </div>
+              <div className="settings-fields">
+                <label>
+                  Дата отчета
+                  <input type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
+                </label>
+                <label>
+                  Точка
+                  <select value={selectedPointId} onChange={(event) => selectPoint(event.target.value)}>
+                    {state.points.filter((point) => point.active).map((point) => (
+                      <option key={point.id} value={point.id}>
+                        {point.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Режим импорта
+                  <select value={importMode} onChange={(event) => setImportMode(event.target.value as ImportMode)}>
+                    <option value="merge">Обновить найденные ячейки</option>
+                    <option value="replace">Заменить отчет</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+
             <input
               ref={importInputRef}
               className="hidden-file-input"
@@ -2610,76 +2677,95 @@ export default function Home() {
               accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               onChange={handleTemplateImport}
             />
-            <label>
-              Режим импорта
-              <select value={importMode} onChange={(event) => setImportMode(event.target.value as ImportMode)}>
-                <option value="merge">Обновить найденные ячейки</option>
-                <option value="replace">Заменить отчет</option>
-              </select>
-            </label>
-            <div className="settings-actions">
-              <button type="button" className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => importInputRef.current?.click()} aria-label="Импорт из шаблона" title="Импорт из шаблона">
-                <Upload size={18} />
-              </button>
-              <button
-                type="button"
-                className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
-                onClick={generateDiscrepancyImage}
-                disabled={discrepancyLines.length === 0}
-                aria-label="Отчет расхождений"
-                title="Отчет расхождений"
-              >
-                <ImageDown size={18} />
-              </button>
-              <button
-                type="button"
-                className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
-                onClick={resetRestsToZeroWithoutShortage}
-                disabled={!canEditReport}
-                aria-label="Обнулить без недостачи"
-                title="Обнулить без недостачи"
-              >
-                <Eraser size={18} />
-              </button>
-              <button
-                type="button"
-                className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
-                onClick={checkSupabaseConnection}
-                disabled={serverCheck.status === "checking"}
-                aria-label="Проверить Supabase"
-                title="Проверить Supabase"
-              >
-                <Wifi size={18} />
-              </button>
-              <button
-                type="button"
-                className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
-                onClick={() => setUiSoundEnabled((current) => !current)}
-                aria-label={uiSoundEnabled ? "Выключить звук" : "Включить звук"}
-                title={uiSoundEnabled ? "Выключить звук" : "Включить звук"}
-              >
-                {uiSoundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-              </button>
-              <button
-                type="button"
-                className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()}
-                onClick={() => setSpeechEnabled((current) => !current)}
-                aria-label={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
-                title={speechEnabled ? "Выключить озвучку цифр" : "Включить озвучку цифр"}
-              >
-                {speechEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-              </button>
+
+            <div className="settings-group">
+              <div className="panel-title">
+                <strong>Импорт и отчеты</strong>
+                <span>Excel / PNG</span>
+              </div>
+              <div className="settings-action-grid">
+                <button type="button" className="secondary-wide settings-text-button no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => importInputRef.current?.click()}>
+                  <Upload size={18} />
+                  Импорт из шаблона
+                </button>
+                <button type="button" className="secondary-wide settings-text-button no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => exportExcel("single")}>
+                  <Download size={18} />
+                  Отчет точки
+                </button>
+                <button type="button" className="secondary-wide settings-text-button no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => exportExcel("all")}>
+                  <Download size={18} />
+                  Все точки
+                </button>
+                <button
+                  type="button"
+                  className="secondary-wide settings-text-button no-ios-callout tap-target"
+                  onContextMenu={(e) => e.preventDefault()}
+                  onClick={generateDiscrepancyImage}
+                  disabled={discrepancyLines.length === 0}
+                >
+                  <ImageDown size={18} />
+                  PNG расхождений
+                </button>
+              </div>
             </div>
-            <div className={`server-status ${serverCheck.status} no-ios-callout`}>
-              {serverCheck.message}
+
+            <div className="settings-group">
+              <div className="panel-title">
+                <strong>Проверка данных</strong>
+                <span>{serverCheck.status === "checking" ? "Проверка" : "Контроль"}</span>
+              </div>
+              <div className="settings-action-grid">
+                <button
+                  type="button"
+                  className="secondary-wide settings-text-button no-ios-callout tap-target"
+                  onContextMenu={(e) => e.preventDefault()}
+                  onClick={resetRestsToZeroWithoutShortage}
+                  disabled={!canEditReport}
+                >
+                  <Eraser size={18} />
+                  Обнулить без недостачи
+                </button>
+                <button
+                  type="button"
+                  className="secondary-wide settings-text-button no-ios-callout tap-target"
+                  onContextMenu={(e) => e.preventDefault()}
+                  onClick={checkSupabaseConnection}
+                  disabled={serverCheck.status === "checking"}
+                >
+                  <Wifi size={18} />
+                  Проверить Supabase
+                </button>
+              </div>
+              <div className={`server-status ${serverCheck.status} no-ios-callout`}>
+                {serverCheck.message}
+              </div>
             </div>
-            <div className="download-actions">
-              <button type="button" className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => exportExcel("single")} aria-label="Отчет точки" title="Отчет точки">
-                <Download size={18} />
-              </button>
-              <button type="button" className="secondary-action no-ios-callout tap-target" onContextMenu={(e) => e.preventDefault()} onClick={() => exportExcel("all")} aria-label="Все точки" title="Все точки">
-                <Download size={18} />
-              </button>
+
+            <div className="settings-group settings-group-wide">
+              <div className="panel-title">
+                <strong>Настройки системы</strong>
+                <span>Звук</span>
+              </div>
+              <div className="settings-action-grid system-settings-grid">
+                <button
+                  type="button"
+                  className={uiSoundEnabled ? "secondary-wide settings-text-button active no-ios-callout tap-target" : "secondary-wide settings-text-button no-ios-callout tap-target"}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onClick={() => setUiSoundEnabled((current) => !current)}
+                >
+                  {uiSoundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                  {uiSoundEnabled ? "Звук включен" : "Звук выключен"}
+                </button>
+                <button
+                  type="button"
+                  className={speechEnabled ? "secondary-wide settings-text-button active no-ios-callout tap-target" : "secondary-wide settings-text-button no-ios-callout tap-target"}
+                  onContextMenu={(e) => e.preventDefault()}
+                  onClick={() => setSpeechEnabled((current) => !current)}
+                >
+                  {speechEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                  {speechEnabled ? "Озвучка цифр включена" : "Озвучка цифр выключена"}
+                </button>
+              </div>
             </div>
           </div>
 
@@ -2753,8 +2839,8 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="directory-section">
-              <div className="panel-title">
+            <div className="directory-section product-directory-section">
+              <div className="panel-title product-directory-title">
                 <strong>Товары</strong>
                 <span>{state.products.filter((product) => product.active).length}</span>
               </div>
@@ -2763,17 +2849,26 @@ export default function Home() {
                 <input inputMode="decimal" value={newProduct.price} onChange={(event) => setNewProduct((current) => ({ ...current, price: event.target.value }))} placeholder="Цена" />
                 <input inputMode="decimal" value={newProduct.norm} onChange={(event) => setNewProduct((current) => ({ ...current, norm: event.target.value }))} placeholder="Норма" />
                 <input value={newProduct.category} onChange={(event) => setNewProduct((current) => ({ ...current, category: event.target.value }))} placeholder="Категория" />
-                <button type="button" onClick={addProduct} aria-label="Добавить товар">
+                <button type="button" className="product-add-button" onClick={addProduct}>
                   <Plus size={18} />
+                  <span>Добавить товар</span>
                 </button>
               </div>
               <label className="search-field compact">
                 <Search size={17} />
                 <input value={productAdminSearch} onChange={(event) => setProductAdminSearch(event.target.value)} placeholder="Поиск в товарах" aria-label="Поиск в товарах" />
               </label>
+              <div className="product-directory-header no-ios-callout">
+                <span>Название</span>
+                <span>Цена</span>
+                <span>Норма</span>
+                <span>Дробный товар</span>
+                <span>Шаг</span>
+                <span>Активен</span>
+              </div>
               <div className="product-admin-list">
                 {adminProducts.map((product) => (
-                  <div className="product-admin-row no-ios-callout" key={product.id}>
+                  <div className="product-admin-row product-directory-row no-ios-callout" key={product.id}>
                     <div className="order-controls">
                       <button type="button" onClick={() => moveProductShelf(product.id, -1)} aria-label="Выше">
                         <ArrowUp size={14} />
@@ -2787,16 +2882,16 @@ export default function Home() {
                     <input inputMode="decimal" value={num(product.norm)} onChange={(event) => updateProduct(product.id, { norm: parseNumber(event.target.value) })} />
                     <input value={product.category} onChange={(event) => updateProduct(product.id, { category: event.target.value })} />
                     <input inputMode="numeric" value={String(product.shelfOrder ?? "")} onChange={(event) => updateProduct(product.id, { shelfOrder: parseNumber(event.target.value) || undefined })} aria-label="Порядок полки" />
+                    <label className="mini-toggle no-ios-callout">
+                      <input type="checkbox" checked={Boolean(product.allowDecimal)} onChange={(event) => updateProduct(product.id, { allowDecimal: event.target.checked, quantityStep: event.target.checked ? product.quantityStep ?? 0.5 : 1 })} />
+                      Дробный
+                    </label>
                     <input
                       inputMode="decimal"
                       value={num(product.quantityStep ?? 1)}
                       onChange={(event) => updateProduct(product.id, { quantityStep: Math.max(0.01, parseNumber(event.target.value) || 1) })}
                       aria-label="Шаг"
                     />
-                    <label className="mini-toggle no-ios-callout">
-                      <input type="checkbox" checked={Boolean(product.allowDecimal)} onChange={(event) => updateProduct(product.id, { allowDecimal: event.target.checked, quantityStep: event.target.checked ? product.quantityStep ?? 0.5 : 1 })} />
-                      0.5
-                    </label>
                     <label className="mini-toggle no-ios-callout">
                       <input type="checkbox" checked={product.active} onChange={(event) => updateProduct(product.id, { active: event.target.checked })} />
                       Актив.
@@ -2870,7 +2965,7 @@ export default function Home() {
         <NavButton icon={<HomeIcon size={20} />} label="Главная" active={activeTab === "home"} onClick={() => setActiveTab("home")} />
         <NavButton
           icon={<Package size={20} />}
-          label="Инвент."
+          label="Остатки"
           active={activeTab === "inventory"}
           badge={missingCount}
           onClick={() => {
@@ -2881,7 +2976,6 @@ export default function Home() {
         <NavButton icon={<PackagePlus size={20} />} label="Приход" active={activeTab === "receipts"} onClick={() => setActiveTab("receipts")} />
         <NavButton icon={<Truck size={20} />} label="Перемещ." active={activeTab === "transfers"} onClick={() => setActiveTab("transfers")} />
         <NavButton icon={<WalletCards size={20} />} label="Финансы" active={activeTab === "finance"} onClick={() => setActiveTab("finance")} />
-        <NavButton icon={<MoreHorizontal size={20} />} label="Еще" active={activeTab === "more"} onClick={() => setActiveTab("more")} />
       </nav>}
 
       {false && lastSaved && <span className="save-stamp">Автосохранение</span>}
@@ -2962,6 +3056,7 @@ function NavButton({
         {icon}
         {Boolean(badge) && <b>{badge}</b>}
       </span>
+      <span className="nav-label">{label}</span>
     </button>
   );
 }
