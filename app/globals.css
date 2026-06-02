@@ -20,7 +20,7 @@
   --purple: #55d3c1;
   --radius: 8px;
   --shadow: 0 14px 30px rgba(0, 0, 0, 0.18);
-  --bottom-nav-height: 58px;
+  --bottom-nav-height: 64px;
 }
 
 * {
@@ -226,7 +226,7 @@ label {
 
 .app-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 138px;
+  grid-template-columns: minmax(0, 1fr) 118px 58px;
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
@@ -284,6 +284,27 @@ label {
   font-weight: 900;
   letter-spacing: 0;
   text-transform: none;
+}
+
+.header-more-button {
+  display: inline-flex;
+  min-width: 0;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #11151b;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.header-more-button.active {
+  border-color: rgba(85, 211, 193, 0.45);
+  background: var(--teal-soft);
+  color: var(--text);
 }
 
 .point-select {
@@ -559,6 +580,20 @@ label {
   width: 56px;
   justify-self: start;
   padding: 0;
+}
+
+.home-primary-cta {
+  min-height: 56px;
+  justify-content: space-between;
+  padding: 0 16px;
+  font-size: 15px;
+  line-height: 1.15;
+}
+
+.home-primary-cta span {
+  min-width: 0;
+  flex: 1 1 auto;
+  text-align: left;
 }
 
 .quiet-panel {
@@ -1879,25 +1914,54 @@ label {
 }
 
 .transfer-options {
-  max-height: 164px;
-  margin: 9px 0 12px;
+  max-height: 112px;
+  margin: 8px 0;
   overflow-y: auto;
 }
 
 .transfer-options button {
-  min-height: 42px;
+  min-height: 36px;
   border: 0;
   border-radius: var(--radius);
   background: var(--surface-2);
   color: var(--text-soft);
-  padding: 0 11px;
+  padding: 0 10px;
   text-align: left;
   font-weight: 800;
+  line-height: 1.15;
 }
 
 .transfer-options button.active {
-  border-color: var(--teal);
+  background: var(--teal-soft);
   color: var(--text);
+}
+
+.selected-transfer-product {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  margin-bottom: 10px;
+  border-radius: var(--radius);
+  background: #11151b;
+  padding: 8px 10px;
+}
+
+.selected-transfer-product span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.selected-transfer-product strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .transfer-stepper {
@@ -1914,8 +1978,9 @@ label {
 
 .transfer-stepper div {
   display: grid;
-  grid-template-columns: 44px 68px 44px;
+  grid-template-columns: 48px minmax(82px, 1fr) 48px;
   align-items: center;
+  min-width: 190px;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -1931,8 +1996,14 @@ label {
 
 .transfer-stepper strong {
   text-align: center;
-  font-size: 20px;
+  font-size: 28px;
+  line-height: 1;
   color: var(--text);
+}
+
+.transfer-submit {
+  min-height: 54px;
+  font-size: 15px;
 }
 
 .two-fields {
@@ -2087,6 +2158,16 @@ label {
   border-color: rgba(240, 184, 77, 0.34);
 }
 
+.close-panel.locked .primary-cta:disabled {
+  background: var(--surface-3);
+  color: var(--muted);
+  box-shadow: none;
+}
+
+.check-action {
+  border-color: rgba(240, 184, 77, 0.42);
+}
+
 .close-status {
   display: flex;
   align-items: center;
@@ -2150,6 +2231,35 @@ label {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.settings-group {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #11151b;
+  padding: 11px;
+}
+
+.settings-fields,
+.settings-action-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.settings-text-button {
+  min-width: 0;
+  justify-content: flex-start;
+  min-height: 44px;
+  padding: 0 12px;
+  text-align: left;
+  white-space: normal;
+}
+
+.settings-text-button.active {
+  border-color: rgba(85, 211, 193, 0.44);
+  background: var(--teal-soft);
 }
 
 .panel-title {
@@ -2293,8 +2403,16 @@ label {
 }
 
 .product-add-form {
-  grid-template-columns: minmax(140px, 1.4fr) 74px 74px minmax(100px, 0.9fr) 44px;
-  overflow-x: auto;
+  grid-template-columns: minmax(160px, 1.4fr) 82px 82px minmax(120px, 0.9fr) minmax(170px, auto);
+  overflow-x: hidden;
+}
+
+.product-add-button {
+  display: inline-flex !important;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  white-space: nowrap;
 }
 
 .admin-row,
@@ -2319,9 +2437,28 @@ label {
   overflow-y: auto;
 }
 
+.product-directory-header {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.45fr) 84px 84px minmax(108px, 0.8fr) 72px minmax(84px, 0.72fr) 38px;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 0 8px 7px 62px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
 .product-admin-row {
-  grid-template-columns: 54px minmax(180px, 1.4fr) 76px 76px minmax(112px, 0.8fr) 72px 64px auto auto 38px;
-  overflow-x: auto;
+  grid-template-columns: 54px minmax(180px, 1.45fr) 84px 84px minmax(120px, 0.88fr) 72px minmax(84px, 0.72fr) 38px;
+  overflow-x: hidden;
+  border-radius: var(--radius);
+  padding: 8px;
+}
+
+.product-directory-row input:nth-of-type(4),
+.product-directory-row input:nth-of-type(5) {
+  display: none;
 }
 
 .order-controls {
@@ -2420,7 +2557,7 @@ label {
   display: grid;
   width: min(100%, 480px);
   height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 4px;
   transform: translateX(-50%);
   border-top: 1px solid rgba(43, 48, 57, 0.9);
@@ -2437,12 +2574,13 @@ label {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0;
+  gap: 2px;
   border-radius: var(--radius);
   background: transparent;
   color: var(--muted);
-  font-size: 0;
+  font-size: 10px;
   font-weight: 900;
+  line-height: 1;
 }
 
 .bottom-nav button.active {
@@ -2454,6 +2592,13 @@ label {
   position: relative;
   display: grid;
   place-items: center;
+}
+
+.nav-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-icon b {
@@ -2573,7 +2718,7 @@ label {
   }
 
   .product-add-form {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) 44px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .product-add-form input:first-child,
@@ -2582,7 +2727,7 @@ label {
   }
 
   .product-add-form button {
-    grid-column: 3;
+    grid-column: 1 / -1;
   }
 
   .admin-row,
@@ -2609,12 +2754,15 @@ label {
   }
 
   .product-admin-row {
-    grid-template-columns: 54px minmax(0, 1fr) minmax(0, 1fr) 38px;
+    grid-template-columns: 48px minmax(0, 1fr) minmax(0, 0.72fr) 38px;
   }
 
-  .product-admin-row > input:first-of-type,
-  .product-admin-row > input:nth-of-type(4) {
-    grid-column: 1 / -1;
+  .product-directory-header {
+    display: none;
+  }
+
+  .product-admin-row > input:first-of-type {
+    grid-column: 2 / -1;
   }
 
   .product-admin-row > .mini-toggle {
@@ -2623,6 +2771,40 @@ label {
     min-height: 38px;
     overflow: hidden;
     white-space: nowrap;
+  }
+}
+
+@media (max-width: 899px) {
+  .product-add-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .product-add-form input:first-child,
+  .product-add-form input:nth-child(4),
+  .product-add-form button {
+    grid-column: 1 / -1;
+  }
+
+  .product-directory-header {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0 4px;
+  }
+
+  .product-directory-header span {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #11151b;
+    padding: 4px 7px;
+  }
+
+  .product-admin-row {
+    grid-template-columns: 48px minmax(0, 1fr) minmax(0, 0.72fr) 38px;
+  }
+
+  .product-admin-row > input:first-of-type {
+    grid-column: 2 / -1;
   }
 }
 
@@ -2790,6 +2972,22 @@ label {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
+  }
+
+  .settings-group-wide {
+    grid-column: 1 / -1;
+  }
+
+  .settings-fields {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .settings-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .system-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .settings-panel > .download-actions {
