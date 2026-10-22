@@ -1,0 +1,2 @@
+{"id":"./","name":"QR Склад","short_name":"QR Склад","description":"Сканер QR-кодов для учёта товаров","lang":"ru","start_url":"./","scope":"./","display":"standalone","orientation":"portrait","background_color":"#000000","theme_color":"#000000",
+ "icons":[{"src":"icon-192.png","sizes":"192x192","type":"image/png"},{"src":"icon-512.png","sizes":"512x512","type":"image/png"},{"src":"icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}]}
