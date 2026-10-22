@@ -1,0 +1,974 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#05070A"></head><body>
+<title>QR Склад</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Unbounded:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: одноколоночный «сканер-терминал» — камера сверху, список товаров под большим пальцем, вкладки внизу */
+:root{
+  --bg:#EDF0F4; --surface:#FFFFFF; --ink:#111620; --muted:#5C6574; --line:#DAE0E8;
+  --accent:#2C40DB; --accent-ink:#FFFFFF; --accent-soft:#E2E6FF;
+  --ok:#0E9A56; --bad:#D5383F; --half:#9A600B; --half-soft:#F9ECD3;
+  --cam-bg:#05070A; --cam-ink:#FFFFFF; --cam-dim:rgba(255,255,255,.62); --cam-glass:rgba(10,12,18,.58);
+  --f-display:"Unbounded","Onest",system-ui,sans-serif;
+  --f-body:"Onest",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0C0F14; --surface:#151921; --ink:#E8ECF2; --muted:#8B94A3; --line:#252B35;
+  --accent:#8191FF; --accent-ink:#0C0F14; --accent-soft:#1D2347;
+  --ok:#3BD48A; --bad:#FF666C; --half:#F0B551; --half-soft:#3A2C12; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0C0F14; --surface:#151921; --ink:#E8ECF2; --muted:#8B94A3; --line:#252B35;
+  --accent:#8191FF; --accent-ink:#0C0F14; --accent-soft:#1D2347;
+  --ok:#3BD48A; --bad:#FF666C; --half:#F0B551; --half-soft:#3A2C12; color-scheme:dark}
+
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;overflow:hidden;-webkit-tap-highlight-color:transparent}
+button,input,label{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{height:100%;max-width:680px;margin:0 auto;display:flex;flex-direction:column;background:var(--bg);position:relative}
+.gut{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+
+/* top */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:10px;flex:none}
+.brand{font-family:var(--f-display);font-weight:700;font-size:17px;letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+.brand svg{width:22px;height:22px;color:var(--accent)}
+.tot{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+.tot b{color:var(--ink);font-weight:600}
+
+main{flex:1;min-height:0;position:relative}
+.view{position:absolute;inset:0;display:flex;flex-direction:column;min-height:0}
+
+/* camera — full screen, as in a dedicated scanner app */
+.cam{position:relative;flex:1;min-height:0;background:var(--cam-bg);color:var(--cam-ink);overflow:hidden}
+.cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .2s}
+.cam.live video{opacity:1}
+.ret{position:absolute;left:50%;top:46%;width:min(66%,280px);aspect-ratio:1;max-width:100%;transform:translate(-50%,-50%);border-radius:18px;
+  box-shadow:0 0 0 2px rgba(255,255,255,.9),0 0 0 999px rgba(0,0,0,.32);transition:box-shadow .12s;pointer-events:none;opacity:0}
+.cam.live .ret{opacity:1}
+.ret::after{content:"";position:absolute;left:8%;right:8%;top:50%;height:2px;border-radius:2px;background:rgba(255,255,255,.9);animation:sweep 1.6s ease-in-out infinite alternate}
+@keyframes sweep{from{top:12%}to{top:88%}}
+@media (prefers-reduced-motion:reduce){.ret::after{animation:none}}
+.cam.flash-ok .ret{box-shadow:0 0 0 5px var(--ok),0 0 0 999px rgba(14,154,86,.35)}
+.cam.flash-bad .ret{box-shadow:0 0 0 5px var(--bad),0 0 0 999px rgba(213,56,63,.35)}
+.cam.nosel .ret{box-shadow:0 0 0 2px rgba(255,255,255,.4),0 0 0 999px rgba(0,0,0,.45)}
+
+.idle{position:absolute;inset:0 0 120px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;padding-block:70px 16px}
+.cam.live .idle{display:none}
+.tapplay{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);z-index:3;display:none}
+.cam.tap .tapplay{display:inline-flex}
+.idle-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.pill{display:inline-flex;align-items:center;gap:8px;height:46px;padding:0 18px;border-radius:999px;font-weight:600;font-size:15px;cursor:pointer}
+.pill svg{width:18px;height:18px}
+.pill.light{background:var(--cam-ink);color:var(--cam-bg)}
+.pill.glass{background:rgba(255,255,255,.12);color:var(--cam-ink);box-shadow:inset 0 0 0 1px rgba(255,255,255,.22)}
+.idle p{margin:0;max-width:36ch;color:var(--cam-dim);font-size:13px;line-height:1.45}
+
+.hud-top{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-block:12px 28px;
+  background:linear-gradient(rgba(0,0,0,.62),transparent)}
+.hud-name{font-weight:700;font-size:17px;line-height:1.2;min-width:0;text-align:left;text-wrap:balance;text-shadow:0 1px 2px rgba(0,0,0,.5);padding:0}
+.hud-name small{display:block;font-weight:500;font-size:12px;color:var(--cam-dim);margin-top:3px;letter-spacing:.04em;text-transform:uppercase}
+.hud-count{text-align:right;flex:none;font-variant-numeric:tabular-nums}
+.hud-count b{font-family:var(--f-display);font-size:34px;line-height:1;display:block}
+.hud-count span{font-size:12px;color:var(--cam-dim)}
+.hud-bot{position:absolute;left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:10px;padding-block:28px 14px;background:linear-gradient(transparent,rgba(0,0,0,.7))}
+.hud-row{display:flex;align-items:center;gap:10px}
+.ib{width:48px;height:48px;flex:none;border-radius:50%;display:grid;place-items:center;background:var(--cam-glass);color:var(--cam-ink);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);cursor:pointer}
+.ib svg{width:21px;height:21px}
+.ib[aria-pressed="true"]{background:var(--cam-ink);color:var(--cam-bg)}
+.pickbtn{flex:1;min-width:0;height:48px;border-radius:24px;background:var(--cam-ink);color:var(--cam-bg);display:flex;align-items:center;gap:8px;padding:0 16px;font-weight:700;font-size:15px}
+.pickbtn svg{width:18px;height:18px;flex:none}
+.pickbtn span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.last{font-family:var(--f-mono);font-size:11px;color:var(--cam-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;min-height:14px}
+.recent .chip{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.2);color:var(--cam-ink)}
+.recent .chip.on{background:var(--cam-ink);border-color:var(--cam-ink);color:var(--cam-bg)}
+
+/* product sheet over the camera */
+.sheet{position:absolute;left:0;right:0;bottom:0;height:86%;z-index:6;display:flex;flex-direction:column;background:var(--bg);border-radius:20px 20px 0 0;
+  box-shadow:0 -12px 40px rgba(0,0,0,.35);transform:translateY(104%);transition:transform .2s ease;visibility:hidden}
+.sheet.open{transform:none;visibility:visible}
+@media (prefers-reduced-motion:reduce){.sheet{transition:none}}
+.sheet-head{flex:none;display:flex;align-items:center;gap:8px;padding-block:14px 8px}
+.sclose{flex:none;height:46px;padding:0 14px;border-radius:12px;font-weight:600;color:var(--accent)}
+
+/* toast */
+.toast{position:absolute;left:50%;top:64px;transform:translate(-50%,-8px);z-index:20;max-width:calc(100% - 32px);padding:10px 16px;border-radius:12px;
+  background:var(--ink);color:var(--bg);font-weight:600;font-size:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;pointer-events:none;transition:opacity .15s,transform .15s;text-align:center}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.toast.bad{background:var(--bad);color:#fff}
+.toast.ok{background:var(--ok);color:#fff}
+
+/* search + list */
+.sbox{flex:1;min-width:0;position:relative}
+.sbox svg{position:absolute;left:12px;top:50%;width:18px;height:18px;transform:translateY(-50%);color:var(--muted);pointer-events:none}
+#q{width:100%;height:46px;border-radius:12px;border:1px solid var(--line);background:var(--surface);padding:0 40px 0 40px;font-size:16px;outline:none}
+#q:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+#q::-webkit-search-cancel-button{display:none}
+#qClear{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:38px;height:38px;border-radius:10px;color:var(--muted);font-size:22px;line-height:1}
+.recent{flex:none;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.recent::-webkit-scrollbar{display:none}
+.recent:empty{display:none}
+.chip{flex:none;max-width:200px;height:32px;padding:0 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.plist{flex:1;min-height:0;overflow-y:auto;margin:0;padding:0 0 12px;list-style:none;overscroll-behavior:contain}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:50px;padding-block:6px;border-bottom:1px solid var(--line);cursor:pointer;user-select:none}
+.row:active{background:var(--accent-soft)}
+.row .nm{min-width:0;font-weight:500;font-size:15px;line-height:1.25;display:flex;align-items:center;gap:8px}
+.row.sel{background:var(--accent-soft)}
+.row.sel .nm{color:var(--accent);font-weight:700}
+.half{flex:none;font-style:normal;font-size:11px;font-weight:700;color:var(--half);background:var(--half-soft);border-radius:6px;padding:2px 6px;letter-spacing:.02em}
+.cnt{flex:none;display:flex;align-items:baseline;gap:6px;font-variant-numeric:tabular-nums}
+.cnt b{font-family:var(--f-display);font-weight:500;font-size:15px;min-width:28px;height:28px;padding:0 8px;border-radius:8px;display:inline-grid;place-items:center;background:var(--ink);color:var(--bg)}
+.row.sel .cnt b{background:var(--accent);color:var(--accent-ink)}
+.cnt small{font-size:12px;color:var(--muted)}
+.row.add .nm{color:var(--accent);font-weight:600}
+.empty{padding-block:28px;color:var(--muted);text-align:center;line-height:1.5}
+
+/* other views */
+.scroll{flex:1;min-height:0;overflow-y:auto;padding-block:4px 24px}
+h2{font-family:var(--f-display);font-weight:500;font-size:18px;letter-spacing:-.01em;margin:18px 0 10px;text-wrap:balance}
+h2:first-child{margin-top:6px}
+.sum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:6px}
+.stat{min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.stat span{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.stat b{font-family:var(--f-display);font-size:22px;font-weight:500;font-variant-numeric:tabular-nums}
+.grp{border-bottom:1px solid var(--line)}
+.grp summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:52px;padding-block:6px;cursor:pointer}
+.grp summary::-webkit-details-marker{display:none}
+.grp summary .nm{min-width:0;font-weight:600;display:flex;align-items:center;gap:8px}
+.gbody{padding:0 0 12px}
+.gact{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.sbtn{height:36px;padding:0 14px;border-radius:10px;background:var(--surface);border:1px solid var(--line);font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.sbtn.acc{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.tog{display:inline-flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;margin-right:auto}
+.tog input{width:18px;height:18px;accent-color:var(--accent)}
+.clist{margin:0;padding:0;list-style:none;counter-reset:c;max-height:300px;overflow-y:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.clist li{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 10px;border-bottom:1px solid var(--line);font-size:13px}
+.clist li:last-child{border-bottom:0}
+.clist .ix{color:var(--muted);font-variant-numeric:tabular-nums;min-width:26px;font-size:12px}
+.clist code{flex:1;min-width:0;font-family:var(--f-mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.clist time{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.del{width:32px;height:32px;border-radius:8px;color:var(--muted);font-size:18px;flex:none}
+.del:hover{color:var(--bad);background:var(--bg)}
+.field{margin-bottom:14px}
+.lbl{display:block;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.seg{display:flex;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
+.seg button{flex:1;height:38px;border-radius:9px;font-weight:600;font-size:14px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.sw{display:flex;align-items:center;gap:10px;min-height:44px;cursor:pointer}
+.sw input{width:20px;height:20px;accent-color:var(--accent)}
+.hint{color:var(--muted);font-size:13px;line-height:1.5;margin:8px 0;max-width:62ch}
+.hint b{color:var(--ink);font-weight:600}
+.primary{width:100%;height:52px;border-radius:14px;background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:16px;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:8px}
+.primary svg{width:20px;height:20px}
+.primary:disabled{opacity:.5;cursor:default}
+.btns{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.btns .sbtn{height:44px;justify-content:center}
+.danger{margin-top:14px;height:44px;width:100%;border-radius:12px;border:1px solid var(--bad);color:var(--bad);font-weight:600}
+.danger.arm{background:var(--bad);color:#fff}
+
+/* tabs */
+.tabs{flex:none;display:flex;border-top:1px solid var(--line);background:var(--surface);padding-block:4px}
+.tabs button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.02em}
+.tabs svg{width:22px;height:22px}
+.tabs button[aria-selected="true"]{color:var(--accent)}
+</style>
+
+<div class="app" id="app">
+  <header class="top gut">
+    <div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3"/><rect x="7.5" y="7.5" width="3.5" height="3.5" rx=".6" fill="currentColor" stroke="none"/><rect x="13" y="7.5" width="3.5" height="3.5" rx=".6" fill="currentColor" stroke="none"/><rect x="7.5" y="13" width="3.5" height="3.5" rx=".6" fill="currentColor" stroke="none"/><path d="M13 13h1.5M16.5 13v3.5M13 16.5h2"/></svg>QR Склад</div>
+    <div class="tot" id="tot"></div>
+  </header>
+
+  <main>
+    <section class="view" id="v-scan">
+      <div class="cam nosel" id="cam">
+        <video id="video" playsinline muted autoplay></video>
+        <div class="ret"></div>
+        <button class="tapplay pill light" id="tapPlay" type="button">Нажмите, чтобы включить камеру</button>
+        <div class="idle gut" id="idle">
+          <div class="idle-row">
+            <button class="pill light" id="camStart" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Включить камеру</button>
+            <label class="pill glass" for="photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>Фото с QR</label>
+          </div>
+          <p id="camMsg">Запуск камеры…</p>
+        </div>
+        <div class="hud-top gut">
+          <button class="hud-name" id="hudName" type="button">Выберите товар</button>
+          <div class="hud-count" id="hudCount"></div>
+        </div>
+        <div class="hud-bot gut">
+          <div class="last" id="last"></div>
+          <div class="recent" id="recent"></div>
+          <div class="hud-row">
+            <button class="ib" id="undo" type="button" title="Отменить последний код" aria-label="Отменить последний код"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
+            <button class="pickbtn" id="pickBtn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span id="pickLbl">Выбрать товар</span></button>
+            <button class="ib" id="torch" type="button" title="Фонарик" aria-label="Фонарик" aria-pressed="false" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2h10l-2 6H9z"/><path d="M9 8v12a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2V8"/><path d="M12 13v2"/></svg></button>
+            <label class="ib" for="photo" title="Фото с QR" aria-label="Фото с QR"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg></label>
+          </div>
+        </div>
+      </div>
+      <div class="sheet" id="sheet" aria-hidden="true">
+        <div class="sheet-head gut">
+          <div class="sbox">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="q" type="search" placeholder="Поиск: jw blue, heine, moet…" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="go">
+            <button id="qClear" type="button" aria-label="Очистить поиск" hidden>×</button>
+          </div>
+          <button class="sclose" id="sheetClose" type="button">Камера</button>
+        </div>
+        <ul class="plist" id="plist"></ul>
+      </div>
+    </section>
+
+    <section class="view" id="v-codes" hidden>
+      <div class="scroll gut" id="codesWrap"></div>
+    </section>
+
+    <section class="view" id="v-exp" hidden>
+      <div class="scroll gut">
+        <h2>Экспорт в PDF</h2>
+        <div class="field">
+          <span class="lbl">Размер QR-кода</span>
+          <div class="seg" id="sizeSeg">
+            <button type="button" data-size="15">15 мм</button>
+            <button type="button" data-size="25">25 мм</button>
+            <button type="button" data-size="40">40 мм</button>
+            <button type="button" data-size="150">15 см</button>
+          </div>
+        </div>
+        <label class="sw"><input type="checkbox" id="optNew"><span>Каждый товар с нового листа</span></label>
+        <label class="sw"><input type="checkbox" id="optNums"><span>Номер под каждым кодом</span></label>
+        <p class="hint" id="layoutHint"></p>
+        <button class="primary" id="pdfAll" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Скачать PDF</button>
+        <p class="hint" id="expStatus"></p>
+
+        <h2>Данные</h2>
+        <div class="btns">
+          <button class="sbtn" id="csv" type="button">Таблица CSV</button>
+          <button class="sbtn" id="bak" type="button">Резервная копия</button>
+          <label class="sbtn" for="importFile" style="justify-content:center;cursor:pointer">Восстановить</label>
+        </div>
+        <button class="danger" id="clr" type="button">Очистить все коды</button>
+        <p class="hint">Коды хранятся в этом браузере на этом устройстве. Делайте резервную копию в конце смены — её можно восстановить на любом устройстве.</p>
+      </div>
+    </section>
+    <div class="toast" id="toast"></div>
+  </main>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="scan" aria-selected="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 8V5a2 2 0 0 1 2-2h3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M8 21H5a2 2 0 0 1-2-2v-3M7 12h10"/></svg>Скан</button>
+    <button type="button" role="tab" data-tab="codes" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></svg>Коды</button>
+    <button type="button" role="tab" data-tab="exp" aria-selected="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 12v6M9 15l3 3 3-3"/></svg>Экспорт</button>
+  </nav>
+</div>
+<input type="file" id="photo" accept="image/*" capture="environment" hidden>
+<input type="file" id="importFile" accept=".json,application/json" hidden>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+(() => {
+const PRODUCTS = `ABSOLUT BLUE LTR
+J/W RED LABEL  1 LTR
+J/W BLAK LABEL 1 LTR
+JACK DANIELS LTR
+CHIVAS REGAL 1 LTR
+HEINEKEN BEER CANS 33CL
+BUDWEISER BEER CAN 33/35
+CARLSBERG 50CL Can
+RED HORSE 50CL Can
+AMSTEL LIGHT Slim Can 35
+CORONA BEER BTL 35.5CL
+STELLA 33CL BTLS
+STELLA ARTOIS 33 CL cans
+HEINEKEN BEER BTL 33CL
+BUDWEISER BERR BTL 33cl
+SMIRNOFF ICE RED 27,5CL
+PERONI NASTRO AZURO BEER
+JC CHARDONNAY 75CL
+JC SHIRAZ CABARNET 75CL
+CES PINOT GRIG D VEN FIO
+Le GRAND Noir SAUV BLANC
+Le GRAND Noir MERLOT 75C
+MIP Collection ROSE Provienc 7
+CH KSARA SUNSET ROSE 75C
+MATEUS ROSE 75CL
+BACARDI WHITE RUM LTR
+BACARDI BLACK. 1 LTR
+BACARDI GOLD LTR
+JOSE CUERVO GOLD LTR
+JOSE CUERVO SILVER Espec
+TANQUERAY GIN LTR
+GORDONS PINK GIN Ltr
+GORDONS GIN LTR
+BOMBAY SAPPHIRE GIN LTR
+HENDRICKS GIN 1 LTR
+CAPTAIN MORGAN BLK LTR
+CAPTAIN MORGAN SPICED GO
+MALIBU WHITHE RUM LTR
+BAILEYS IRISH CREAM LTR
+AMARULA CREAM LTR
+JAMESON IRISH WSK LTR
+J&B RARE SCOTCH 1 LTR
+D/H CLARNET SELECT 5LTR
+D/H PREM GRN CRU 5LTR
+MARTINI BIANCO 1 LTR
+SMIRNOFF R/L 1 LTR
+STOLICHNAYA VODKA LTR
+RUSSIAN STD. PETERS L
+JAGERMEISTER  1 LTR
+BELVEDERE VODKA  LTR
+GREY GOOSE VODKA LTR
+BELUGA  NOBLE VODKA 70CL
+CIROK VODKA LTR
+SKYY VODKA 1 LTR
+ARAK TOUMA 50/54CL
+EFE Fresh Grape RAKI LTR Green
+J/W GOLD LABEL RESERV 1
+J/W DOUBLE BLACK LTR
+J/W BLUE LABEL 1 LTR
+HENNESSY VS LTR
+HENNESSY V.S.O.P 1 LTR Pr
+HENNESSY XO LTR
+REMY MARTIN VSOP LTR
+CHIVAS 18 YRS LTR
+ROYAL SALUTE 21 YRS LTR
+PATRON COFFE
+PATRON SILVER  75CL TEQUI
+PATRON ANEJO 75CL GOLD T
+DON JULIO BLANCO 70/75CL
+DON JULIO REPOSADO 70/75
+DON JULIO ANEJO 70/75CL
+DON JULIO 1942 ANEJO 70
+ASTI MARTINI 75CL
+JC CHARDONNAY PINOT NOIR
+BOTTEGA VINO D POET PROS
+BOTTEGA ROSE Proseco POE
+BOTTEGA GOLD BRUT 75C vi
+VEUVE CLICQUOT Y/L PONSR
+MOET & CHANDON BRUT IMP
+MOET & CHANDON  ROSE 75CL
+MOET ICE IMPERIAL 75cl
+DOM PERIGNON M&C 75CL
+GLENDFIDICH SPL R12YRS
+GLENDFIDICH 15 YRS LTR
+GLENDFIDICH 18Y Smal Bat
+BARON RIMAPERE SAUV BLAN
+MARCHESI GAVI D GAVI 75C
+LAROCHE CHABLIS ST MARTI
+L J BOURGOGNE BL Cuv D ja
+CASTEL CH. BARREYRES HAUT M 75
+CH SAINT LEON BOX SUP 75
+CAMPO VIEJO RESERVA RIOJ
+CAMPO VIEJO GRAN RESERVA
+M MINUTY ROSE PROVENCE
+Cav D ESCLN WHISPERING
+JACK DANIELS HONEY LTR
+BACCARDI BREEZER W/MELON
+ASAHI BEER BTLS SUPER DR
+APEROLE Aperitivo LTR
+CHIVAS 25 YRS
+CLASE AZUL Reposado 70/7
+MS CH PERRON LALANDE D POMEROL
+LA CELIA RESERVA MALBEC 75CL
+CALVET SANCERRE Les Hautes
+CHATEAU des LAURETS Saint Emilion
+GUINNESS BEER CANS 44cl
+XXL  VODKA MIX ENERGY CAN
+MONKEY 47  DRY GIN 50CL
+GENTLEMAN JACK 1 LTR JD
+MACALLAN 12 YR FIN TRIP
+MACALLAN 15 YRS Double Ca
+MACALLAN 18 YRS
+HOEGARDEN BLANCHE 33CL B
+TEQUILA ROSE LIQUER 70C S/Bery
+MALFY Con Ara Blood Orange GIN 70
+MALFY GIN ROSA 70cl GrapfruitE
+Drumshanb GUNPODER GIN
+CH SAINT MAUR L Exelenc ROS 7
+CH LAGRANGE 2010 St Julien
+RUINART BLANC D BLANC 75 CL
+ZONIN PROSECCO 75CL
+OYSTER BAY SAUVIGNON
+BALANTINES
+СИГАРЕТЫ
+VAPE`.split('\n').map(s => s.trim()).filter(Boolean);
+
+// Пиво считается по половинкам: 2 QR = 1 шт
+const BEER = new Set(['HEINEKEN BEER CANS 33CL','BUDWEISER BEER CAN 33/35','CARLSBERG 50CL Can','RED HORSE 50CL Can',
+  'AMSTEL LIGHT Slim Can 35','CORONA BEER BTL 35.5CL','STELLA 33CL BTLS','STELLA ARTOIS 33 CL cans','HEINEKEN BEER BTL 33CL',
+  'BUDWEISER BERR BTL 33cl','PERONI NASTRO AZURO BEER','ASAHI BEER BTLS SUPER DR','GUINNESS BEER CANS 44cl','HOEGARDEN BLANCHE 33CL B']);
+
+const KEY = 'qrsklad.v1';
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const norm = s => s.toLowerCase().replace(/[^a-z0-9а-яё]+/g, ' ').trim();
+const fmtQty = n => Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
+
+/* ---------- state ---------- */
+function defaults() {
+  return { products: PRODUCTS.map((n, i) => ({ id: 'p' + i, name: n, half: BEER.has(n) })),
+           codes: [], sel: null, recent: [], cfg: { size: 15, newPage: true, nums: true } };
+}
+let S;
+try {
+  const r = JSON.parse(localStorage.getItem(KEY));
+  if (r && Array.isArray(r.products)) {
+    S = Object.assign(defaults(), r);
+    S.cfg = Object.assign(defaults().cfg, r.cfg || {});
+    const have = new Set(S.products.map(p => p.name));
+    PRODUCTS.forEach(n => { if (!have.has(n)) S.products.push({ id: 'n' + Date.now().toString(36) + S.products.length, name: n, half: BEER.has(n) }); });
+  }
+} catch (e) {}
+if (!S) S = defaults();
+
+let codeMap, counts;
+const byId = new Map();
+const keyOf = new Map();
+function reindex() {
+  byId.clear(); S.products.forEach(p => { byId.set(p.id, p); keyOf.set(p.id, norm(p.name).replace(/ /g, '')); });
+  codeMap = new Map(); counts = new Map();
+  for (const r of S.codes) { codeMap.set(r.c, r); counts.set(r.p, (counts.get(r.p) || 0) + 1); }
+  if (S.sel && !byId.has(S.sel)) S.sel = null;
+}
+reindex();
+let saveT = 0;
+function save() {
+  clearTimeout(saveT);
+  saveT = setTimeout(() => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }, 60);
+}
+const cnt = id => counts.get(id) || 0;
+const qty = p => p.half ? cnt(p.id) / 2 : cnt(p.id);
+
+/* ---------- feedback ---------- */
+let actx = null;
+function audio() { if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (actx && actx.state === 'suspended') actx.resume(); }
+document.addEventListener('pointerdown', audio, { once: false, passive: true });
+function beep(ok) {
+  if (!actx) return;
+  try {
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+    o.type = ok ? 'sine' : 'square'; o.frequency.value = ok ? 1760 : 220;
+    g.gain.setValueAtTime(ok ? .25 : .15, t); g.gain.exponentialRampToValueAtTime(.001, t + (ok ? .09 : .22));
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + (ok ? .1 : .24));
+  } catch (e) {}
+}
+const toastEl = $('#toast'); let toastT = 0;
+function toast(msg, kind) {
+  toastEl.textContent = msg; toastEl.className = 'toast show' + (kind ? ' ' + kind : '');
+  clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), 1800);
+}
+const camEl = $('#cam'); let flashT = 0;
+function feedback(ok, msg) {
+  beep(ok);
+  try { navigator.vibrate && navigator.vibrate(ok ? 35 : [70, 50, 70]); } catch (e) {}
+  camEl.classList.remove('flash-ok', 'flash-bad'); void camEl.offsetWidth;
+  camEl.classList.add(ok ? 'flash-ok' : 'flash-bad');
+  clearTimeout(flashT); flashT = setTimeout(() => camEl.classList.remove('flash-ok', 'flash-bad'), 350);
+  if (msg) toast(msg, ok ? 'ok' : 'bad');
+}
+
+/* ---------- codes ---------- */
+let pending = [];
+let lastSeen = { c: '', t: 0 }, warned = { c: '', t: 0 };
+// Дубли не считаются: о повторе предупреждаем один раз, дальше камера молча его пропускает
+const quietDup = new Set();
+function addCode(raw, quiet) {
+  const code = String(raw).replace(/[\r\n]+$/, '').trim();
+  if (!code) return false;
+  const now = Date.now();
+  if (code === lastSeen.c && now - lastSeen.t < 1500) { lastSeen.t = now; return false; }
+  lastSeen = { c: code, t: now };
+  const ex = codeMap.get(code);
+  if (ex) {
+    if (!quietDup.has(code)) { quietDup.add(code); feedback(false, 'Дубль, не засчитан · ' + (byId.get(ex.p)?.name || '')); }
+    return false;
+  }
+  if (!S.sel) {
+    // код не теряется: ждёт, пока выберут товар
+    if (!pending.includes(code)) { pending.push(code); feedback(true, 'Код сохранён — выберите товар'); openSheet(false); }
+    return false;
+  }
+  const rec = { c: code, p: S.sel, t: now };
+  S.codes.push(rec); codeMap.set(code, rec); counts.set(S.sel, cnt(S.sel) + 1); quietDup.add(code);
+  save(); feedback(true, quiet ? '' : (camLive ? '' : '+1 · ' + byId.get(S.sel).name));
+  $('#last').textContent = code;
+  refreshCounts(S.sel);
+  return true;
+}
+function removeCode(code) {
+  const i = S.codes.findIndex(r => r.c === code);
+  if (i < 0) return;
+  const [r] = S.codes.splice(i, 1);
+  codeMap.delete(code); counts.set(r.p, Math.max(0, cnt(r.p) - 1)); quietDup.delete(code);
+  if (lastSeen.c === code) lastSeen = { c: '', t: 0 };
+  save(); refreshCounts(r.p);
+}
+function undo() {
+  for (let i = S.codes.length - 1; i >= 0; i--) {
+    if (!S.sel || S.codes[i].p === S.sel) { const c = S.codes[i].c; removeCode(c); toast('Удалён последний код'); $('#last').textContent = ''; return; }
+  }
+  toast('Нечего отменять');
+}
+
+/* ---------- product list ---------- */
+const plist = $('#plist'), q = $('#q');
+function cntHTML(p) {
+  const n = cnt(p.id);
+  if (!n) return '';
+  return p.half ? `<small>${n} QR</small><b>${fmtQty(n / 2)}</b>` : `<b>${n}</b>`;
+}
+function rowHTML(p) {
+  return `<li class="row gut${p.id === S.sel ? ' sel' : ''}" data-id="${p.id}"><span class="nm">${esc(p.name)}${p.half ? '<i class="half">½</i>' : ''}</span><span class="cnt">${cntHTML(p)}</span></li>`;
+}
+let shown = [];
+function filtered() {
+  const toks = norm(q.value).split(' ').filter(Boolean);
+  if (!toks.length) return S.products;
+  return S.products.filter(p => { const k = keyOf.get(p.id); return toks.every(t => k.includes(t)); });
+}
+function renderList() {
+  shown = filtered();
+  let h = shown.map(rowHTML).join('');
+  const v = q.value.trim();
+  if (v && !S.products.some(p => p.name.toLowerCase() === v.toLowerCase()))
+    h += `<li class="row gut add" data-add="1"><span class="nm">+ Добавить товар «${esc(v)}»</span></li>`;
+  plist.innerHTML = h || '<li class="empty gut">Ничего не найдено</li>';
+  $('#qClear').hidden = !q.value;
+}
+function renderRecent() {
+  $('#recent').innerHTML = S.recent.filter(id => byId.has(id)).slice(0, 8)
+    .map(id => `<button type="button" class="chip${id === S.sel ? ' on' : ''}" data-id="${id}">${esc(byId.get(id).name)}</button>`).join('');
+}
+function renderHud() {
+  const p = byId.get(S.sel);
+  camEl.classList.toggle('nosel', !p);
+  $('#hudName').innerHTML = p ? `${esc(p.name)}<small>${p.half ? 'пиво · 2 QR = 1 шт' : 'сканируйте коды'}</small>` : 'Выберите товар<small>нажмите, чтобы найти</small>';
+  $('#pickLbl').textContent = p ? p.name : 'Выбрать товар';
+  $('#hudCount').innerHTML = p ? `<b>${fmtQty(qty(p))}</b><span>${cnt(p.id)} QR</span>` : '';
+}
+function renderTotal() {
+  const prods = S.products.filter(p => cnt(p.id)).length;
+  $('#tot').innerHTML = `<b>${S.codes.length}</b> QR · ${prods} ${plural(prods, 'товар', 'товара', 'товаров')}`;
+}
+function plural(n, a, b, c) { const m = n % 10, h = n % 100; return m === 1 && h !== 11 ? a : m >= 2 && m <= 4 && (h < 10 || h >= 20) ? b : c; }
+function refreshCounts(pid) {
+  const li = plist.querySelector(`[data-id="${pid}"]`);
+  if (li) li.querySelector('.cnt').innerHTML = cntHTML(byId.get(pid));
+  renderHud(); renderTotal();
+  if (curTab === 'codes') renderCodes();
+}
+function pick(id) {
+  if (!byId.has(id)) return;
+  S.sel = id;
+  S.recent = [id, ...S.recent.filter(x => x !== id)].slice(0, 12);
+  save();
+  lastSeen = { c: '', t: 0 };
+  closeSheet();
+  renderList(); renderRecent(); renderHud();
+  if (pending.length) {
+    const list = pending; pending = []; let added = 0;
+    list.forEach(c => { lastSeen = { c: '', t: 0 }; if (addCode(c, true)) added++; });
+    if (added) toast(`+${added} · ${byId.get(id).name}`, 'ok');
+  }
+  if (!camLive && !camFailed) camStart();
+}
+const sheet = $('#sheet');
+let sheetOpen = false;
+function openSheet(focus) {
+  sheetOpen = true; sheet.classList.add('open'); sheet.setAttribute('aria-hidden', 'false');
+  q.value = ''; renderList();
+  const li = plist.querySelector('.row.sel'); if (li) li.scrollIntoView({ block: 'center' });
+  if (focus !== false) q.focus({ preventScroll: true });
+}
+function closeSheet() {
+  sheetOpen = false; sheet.classList.remove('open'); sheet.setAttribute('aria-hidden', 'true');
+  q.blur(); lastSeen = { c: '', t: 0 };
+}
+$('#pickBtn').addEventListener('click', () => openSheet());
+$('#hudName').addEventListener('click', () => openSheet());
+$('#sheetClose').addEventListener('click', closeSheet);
+plist.addEventListener('click', e => {
+  const li = e.target.closest('li.row'); if (!li) return;
+  if (li.dataset.add) {
+    const name = q.value.trim(); const id = 'c' + Date.now().toString(36);
+    S.products.push({ id, name, half: false }); reindex(); pick(id); return;
+  }
+  pick(li.dataset.id);
+});
+$('#recent').addEventListener('click', e => { const b = e.target.closest('.chip'); if (b) pick(b.dataset.id); });
+q.addEventListener('input', renderList);
+q.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); if (shown.length) pick(shown[0].id); }
+  if (e.key === 'Escape') closeSheet();
+});
+$('#qClear').addEventListener('click', () => { q.value = ''; renderList(); q.focus(); });
+
+/* ---------- camera ---------- */
+const video = $('#video');
+let stream = null, track = null, camLive = false, camFailed = false, raf = 0, busy = false, detector = null, wake = null;
+const frame = document.createElement('canvas'); const fctx = frame.getContext('2d', { willReadFrequently: true });
+(async () => {
+  if ('BarcodeDetector' in window) {
+    try {
+      const f = await BarcodeDetector.getSupportedFormats();
+      const want = f.filter(x => x === 'qr_code' || x === 'data_matrix');
+      if (want.includes('qr_code')) detector = new BarcodeDetector({ formats: want });
+    } catch (e) {}
+  }
+})();
+let camStarting = false;
+const withTimeout = (pr, ms) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej({ name: 'Timeout' }), ms))]);
+function camMsg(t) { $('#camMsg').textContent = t; }
+async function getStream() {
+  const tries = [
+    { audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
+    { audio: false, video: { facingMode: 'environment' } },
+    { audio: false, video: true }
+  ];
+  let err;
+  for (const c of tries) {
+    try { return await withTimeout(navigator.mediaDevices.getUserMedia(c), 15000); }
+    catch (e) { err = e; if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError' || e.name === 'Timeout')) break; }
+  }
+  throw err;
+}
+async function playVideo() {
+  video.muted = true; video.setAttribute('playsinline', ''); video.setAttribute('muted', '');
+  try { await video.play(); return true; } catch (e) { return false; }
+}
+async function camStart() {
+  if (camLive || camStarting) return;
+  if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    camFailed = true;
+    camMsg('Здесь браузер не даёт доступ к камере. Откройте приложение по прямой ссылке https:// в Chrome или Safari.');
+    return;
+  }
+  camStarting = true;
+  camMsg('Запуск камеры…');
+  try { stream = await getStream(); }
+  catch (e) {
+    camStarting = false; camFailed = true;
+    const n = e && e.name;
+    camMsg(n === 'NotAllowedError' || n === 'SecurityError'
+      ? 'Камера заблокирована в этом окне. Если вы в приложении Claude или Telegram — откройте ссылку в Chrome/Safari. Если в браузере — разрешите камеру в настройках сайта и нажмите «Включить камеру».'
+      : n === 'NotReadableError' ? 'Камера занята другим приложением. Закройте его и нажмите «Включить камеру».'
+      : n === 'Timeout' ? 'Камера не ответила. Нажмите «Включить камеру».'
+      : 'Камера не найдена (' + (n || 'ошибка') + '). Нажмите «Включить камеру» или сканируйте с фото.');
+    return;
+  }
+  camStarting = false;
+  video.srcObject = stream;
+  track = stream.getVideoTracks()[0];
+  // iOS/Android гасят камеру при сворачивании — поднимаем её снова
+  track.addEventListener('ended', () => { camLive = false; stream = track = null; camEl.classList.remove('live'); if (!document.hidden) camStart(); });
+  camLive = true; camFailed = false; camEl.classList.add('live');
+  if (!(await playVideo())) camEl.classList.add('tap');   // автозапуск видео запрещён — запустим по первому касанию
+  try { const c = track.getCapabilities && track.getCapabilities(); $('#torch').hidden = !(c && c.torch); } catch (e) {}
+  try { track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {}); } catch (e) {}
+  try { wake = await navigator.wakeLock?.request('screen'); } catch (e) {}
+  // если кадров нет, перезапускаем камеру
+  setTimeout(() => { if (camLive && !video.videoWidth) { stream.getTracks().forEach(t => t.stop()); camLive = false; stream = track = null; camEl.classList.remove('live'); camStart(); } }, 4000);
+  loop();
+}
+document.addEventListener('pointerdown', async () => {
+  if (camLive && video.paused) { if (await playVideo()) camEl.classList.remove('tap'); }
+  else if (!camLive && !camStarting && camFailed && curTab === 'scan') { /* ждём явного нажатия «Включить камеру» */ }
+}, { passive: true });
+video.addEventListener('playing', () => camEl.classList.remove('tap'));
+function loop() { if (!raf) raf = requestAnimationFrame(tick); }
+let fno = 0;
+async function tick() {
+  raf = 0;
+  if (!camLive || document.hidden || curTab !== 'scan') return;
+  if (sheetOpen) { loop(); return; }
+  if (!busy && video.readyState >= 2) {
+    busy = true;
+    try { (await decodeFrame()).forEach(c => addCode(c)); } catch (e) {}
+    busy = false;
+  }
+  loop();
+}
+async function decodeFrame() {
+  if (detector) return (await detector.detect(video)).map(b => b.rawValue);
+  const vw = video.videoWidth, vh = video.videoHeight; if (!vw) return [];
+  // чередуем общий и увеличенный центр — мелкие коды на бутылках ловятся быстрее
+  const side = Math.min(vw, vh) * ((fno++ & 1) ? .5 : .85), D = 520;
+  frame.width = frame.height = D;
+  fctx.drawImage(video, (vw - side) / 2, (vh - side) / 2, side, side, 0, 0, D, D);
+  const r = jsQR(fctx.getImageData(0, 0, D, D).data, D, D, { inversionAttempts: 'dontInvert' });
+  return r && r.data ? [r.data] : [];
+}
+$('#camStart').addEventListener('click', () => { camFailed = false; camStart(); });
+$('#tapPlay').addEventListener('click', async () => { if (await playVideo()) camEl.classList.remove('tap'); });
+$('#undo').addEventListener('click', undo);
+$('#torch').addEventListener('click', async e => {
+  const b = e.currentTarget, on = b.getAttribute('aria-pressed') !== 'true';
+  try { await track.applyConstraints({ advanced: [{ torch: on }] }); b.setAttribute('aria-pressed', String(on)); } catch (err) { toast('Фонарик недоступен'); }
+});
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden) return;
+  if (track && track.readyState === 'ended') { camLive = false; stream = track = null; camEl.classList.remove('live'); }
+  if (!camLive && !camFailed) camStart();
+  if (camLive) { try { await video.play(); } catch (e) {} try { wake = await navigator.wakeLock?.request('screen'); } catch (e) {} }
+  loop();
+});
+
+/* photo fallback (one photo may hold several codes) */
+$('#photo').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  if (!S.sel) { feedback(false, 'Сначала выберите товар'); openSheet(false); return; }
+  try {
+    const bmp = await createImageBitmap(f);
+    let out = [];
+    if (detector) { try { out = (await detector.detect(bmp)).map(b => b.rawValue); } catch (err) {} }
+    if (!out.length) {
+      const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height)), w = Math.round(bmp.width * k), h = Math.round(bmp.height * k);
+      frame.width = w; frame.height = h; fctx.drawImage(bmp, 0, 0, w, h);
+      const r = jsQR(fctx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: 'attemptBoth' });
+      if (r && r.data) out = [r.data];
+    }
+    if (!out.length) { feedback(false, 'QR-код на фото не найден'); return; }
+    let added = 0;
+    out.forEach(c => { lastSeen = { c: '', t: 0 }; if (addCode(c, true)) added++; });
+    if (added) toast(`+${added} · ${byId.get(S.sel).name}`, 'ok');
+  } catch (err) { feedback(false, 'Не удалось прочитать фото'); }
+});
+
+/* hardware scanner (keyboard wedge) */
+let kb = '', kbT = 0;
+document.addEventListener('keydown', e => {
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+  const now = Date.now();
+  if (now - kbT > 100) kb = '';
+  kbT = now;
+  if (e.key === 'Enter' || e.key === 'Tab') {
+    if (kb.length >= 4) { e.preventDefault(); audio(); lastSeen = { c: '', t: 0 }; addCode(kb); }
+    kb = ''; return;
+  }
+  if (e.key === '/' && !kb) { e.preventDefault(); showTab('scan'); openSheet(); return; }
+  if (e.key.length === 1) kb += e.key;
+});
+
+/* ---------- codes view ---------- */
+const openGroups = new Set();
+function renderCodes() {
+  const prods = S.products.filter(p => cnt(p.id));
+  const units = prods.reduce((a, p) => a + qty(p), 0);
+  let h = `<h2>Отсканировано</h2><div class="sum">
+    <div class="stat"><span>Товаров</span><b>${prods.length}</b></div>
+    <div class="stat"><span>Количество</span><b>${fmtQty(units)}</b></div>
+    <div class="stat"><span>QR-кодов</span><b>${S.codes.length}</b></div></div>`;
+  if (!prods.length) h += '<p class="empty">Пока пусто. Выберите товар на вкладке «Скан» и отсканируйте первый код.</p>';
+  for (const p of prods) {
+    const list = S.codes.filter(r => r.p === p.id);
+    h += `<details class="grp" data-g="${p.id}"${openGroups.has(p.id) ? ' open' : ''}><summary><span class="nm">${esc(p.name)}${p.half ? '<i class="half">½</i>' : ''}</span><span class="cnt">${cntHTML(p)}</span></summary>
+      <div class="gbody"><div class="gact">
+        <label class="tog"><input type="checkbox" data-half="${p.id}"${p.half ? ' checked' : ''}>Пиво: 2 QR = 1 шт</label>
+        <button type="button" class="sbtn" data-scan="${p.id}">Сканировать</button>
+        <button type="button" class="sbtn acc" data-pdf="${p.id}">PDF</button></div>
+      <ol class="clist">${list.map((r, i) => `<li><span class="ix">${i + 1}</span><code title="${esc(r.c)}">${esc(r.c)}</code><time>${new Date(r.t).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</time><button type="button" class="del" data-del="${esc(r.c)}" aria-label="Удалить код">×</button></li>`).reverse().join('')}</ol></div></details>`;
+  }
+  const w = $('#codesWrap'), st = w.scrollTop; w.innerHTML = h; w.scrollTop = st;
+}
+$('#codesWrap').addEventListener('toggle', e => { const d = e.target; if (d.dataset && d.dataset.g) d.open ? openGroups.add(d.dataset.g) : openGroups.delete(d.dataset.g); }, true);
+$('#codesWrap').addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.del) removeCode(t.dataset.del);
+  else if (t.dataset.scan) { showTab('scan'); pick(t.dataset.scan); }
+  else if (t.dataset.pdf) exportPDF([t.dataset.pdf]);
+});
+$('#codesWrap').addEventListener('change', e => {
+  const id = e.target.dataset.half; if (!id) return;
+  byId.get(id).half = e.target.checked; save(); renderList(); renderHud(); renderCodes();
+});
+
+/* ---------- export ---------- */
+function layout(size) {
+  const W = 210, H = 297, M = 10, HEAD = 16;
+  const big = size >= 100;
+  const gap = big ? 12 : Math.max(4, size * .3);
+  const labelH = S.cfg.nums ? (big ? 9 : Math.max(3.2, size * .2)) : 0;
+  const cols = Math.max(1, Math.floor((W - 2 * M + gap) / (size + gap)));
+  const rows = Math.max(1, Math.floor((H - 2 * M - HEAD + gap) / (size + labelH + gap)));
+  return { W, H, M, HEAD, gap, labelH, cols, rows, big };
+}
+function renderExp() {
+  document.querySelectorAll('#sizeSeg button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.size === S.cfg.size)));
+  $('#optNew').checked = S.cfg.newPage; $('#optNums').checked = S.cfg.nums;
+  const L = layout(S.cfg.size);
+  $('#layoutHint').innerHTML = `Лист A4: <b>${L.cols} × ${L.rows} = ${L.cols * L.rows}</b> ${plural(L.cols * L.rows, 'код', 'кода', 'кодов')} на странице. Над кодами каждого товара — наименование и количество.`;
+  $('#pdfAll').disabled = !S.codes.length;
+}
+$('#sizeSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; S.cfg.size = +b.dataset.size; save(); renderExp(); });
+$('#optNew').addEventListener('change', e => { S.cfg.newPage = e.target.checked; save(); renderExp(); });
+$('#optNums').addEventListener('change', e => { S.cfg.nums = e.target.checked; save(); renderExp(); });
+
+let dlP = null;
+function downloadsCap() { if (!dlP) dlP = (window.claude && window.claude.use) ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null); return dlP; }
+downloadsCap();
+async function saveFile(name, blob) {
+  const dl = await downloadsCap();
+  if (dl) {
+    try { await dl.save({ filename: name, data: blob }); return true; }
+    catch (e) { if (e && e.code === 'declined') return false; if (e && e.code !== 'unavailable' && e.code !== 'not_granted') { toast('Не удалось сохранить файл', 'bad'); return false; } }
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return true;
+}
+const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const safeName = s => s.replace(/[^\wа-яё.-]+/gi, '_').replace(/_+/g, '_').slice(0, 60);
+
+try { qrcode.stringToBytes = qrcode.stringToBytesFuncs['UTF-8']; } catch (e) {}
+function drawQR(doc, text, x, y, size) {
+  let qr;
+  try { qr = qrcode(0, 'M'); qr.addData(text, 'Byte'); qr.make(); }
+  catch (e) { doc.setDrawColor(200, 0, 0); doc.rect(x, y, size, size); doc.line(x, y, x + size, y + size); return; }
+  const n = qr.getModuleCount(), m = size / n;
+  for (let r = 0; r < n; r++) {
+    let c = 0;
+    while (c < n) {
+      if (qr.isDark(r, c)) { const s = c; while (c < n && qr.isDark(r, c)) c++; doc.rect(x + s * m, y + r * m, (c - s) * m + .02, m + .02, 'F'); }
+      else c++;
+    }
+  }
+}
+// Кириллица в заголовках: рисуем текст на canvas и вставляем картинкой
+function headerImg(name, sub, wmm, hmm) {
+  const k = 10, c = document.createElement('canvas'); c.width = wmm * k; c.height = hmm * k;
+  const x = c.getContext('2d');
+  x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+  let fs = 6 * k; x.font = `700 ${fs}px Onest, Arial, sans-serif`;
+  while (x.measureText(name).width > c.width && fs > 3 * k) { fs -= 2; x.font = `700 ${fs}px Onest, Arial, sans-serif`; }
+  x.fillStyle = '#111'; x.fillText(name, 0, 6.4 * k);
+  x.font = `500 ${3.4 * k}px Onest, Arial, sans-serif`; x.fillStyle = '#444'; x.fillText(sub, 0, 11.6 * k);
+  return c.toDataURL('image/png');
+}
+async function exportPDF(pids) {
+  if (!window.jspdf) { toast('Библиотека PDF не загрузилась — проверьте интернет', 'bad'); return; }
+  const prods = (pids || S.products.map(p => p.id)).map(id => byId.get(id)).filter(p => p && cnt(p.id));
+  if (!prods.length) { toast('Нет кодов для экспорта', 'bad'); return; }
+  const st = $('#expStatus'); st.textContent = 'Готовлю PDF…'; toast('Готовлю PDF…');
+  await new Promise(r => setTimeout(r, 30));
+  try { await document.fonts.load('700 20px Onest'); await document.fonts.load('500 20px Onest'); } catch (e) {}
+  const size = S.cfg.size, L = layout(size);
+  const doc = new jspdf.jsPDF({ unit: 'mm', format: 'a4', compress: true });
+  const gridW = L.cols * size + (L.cols - 1) * L.gap, x0 = L.M + (L.W - 2 * L.M - gridW) / 2;
+  const cellH = size + L.labelH, bottom = L.H - L.M;
+  let y = L.M, first = true;
+  const header = (p, cont) => {
+    const n = cnt(p.id);
+    const sub = `Количество: ${fmtQty(qty(p))} шт  ·  QR-кодов: ${n}${p.half ? '  ·  2 QR = 1 шт' : ''}${cont ? '  ·  продолжение' : ''}`;
+    doc.addImage(headerImg(p.name, sub, 190, 13), 'PNG', L.M, y, 190, 13);
+    doc.setDrawColor(0); doc.setLineWidth(.3); doc.line(L.M, y + 14, L.W - L.M, y + 14);
+    y += L.HEAD;
+  };
+  doc.setFillColor(0, 0, 0);
+  for (const p of prods) {
+    const list = S.codes.filter(r => r.p === p.id);
+    if (!first && (S.cfg.newPage || y + L.HEAD + cellH > bottom)) { doc.addPage(); y = L.M; }
+    first = false;
+    header(p, false);
+    for (let i = 0; i < list.length; i += L.cols) {
+      if (y + cellH > bottom + .01) { doc.addPage(); y = L.M; header(p, true); }
+      for (let j = 0; j < L.cols && i + j < list.length; j++) {
+        const x = x0 + j * (size + L.gap), code = list[i + j].c;
+        doc.setFillColor(0, 0, 0); drawQR(doc, code, x, y, size);
+        if (L.labelH) {
+          doc.setTextColor(60);
+          if (L.big) {
+            doc.setFontSize(12); doc.text(String(i + j + 1), x + size / 2, y + size + 5.5, { align: 'center' });
+            if (/^[\x20-\x7e]+$/.test(code)) { doc.setFontSize(8); doc.text(doc.splitTextToSize(code, size)[0], x + size / 2, y + size + 9.5, { align: 'center' }); }
+          } else {
+            doc.setFontSize(Math.min(9, L.labelH * 2.2)); doc.text(String(i + j + 1), x + size / 2, y + size + L.labelH * .78, { align: 'center' });
+          }
+        }
+      }
+      y += cellH + L.gap;
+    }
+    y += 4;
+  }
+  const n = doc.getNumberOfPages(), d = today();
+  for (let i = 1; i <= n; i++) { doc.setPage(i); doc.setFontSize(7); doc.setTextColor(130); doc.text(d, L.M, L.H - 4); doc.text(`${i} / ${n}`, L.W - L.M, L.H - 4, { align: 'right' }); }
+  const fname = prods.length === 1 ? `QR_${safeName(prods[0].name)}_${d}.pdf` : `QR_${d}.pdf`;
+  const ok = await saveFile(fname, doc.output('blob'));
+  st.textContent = ok ? `Готово: ${fname} · ${n} ${plural(n, 'лист', 'листа', 'листов')}` : 'Сохранение отменено';
+  if (ok) toast('PDF готов', 'ok');
+}
+$('#pdfAll').addEventListener('click', () => exportPDF());
+$('#csv').addEventListener('click', () => {
+  const rows = [['Товар', 'Количество', 'QR-кодов', 'Код', 'Время']];
+  for (const p of S.products) for (const r of S.codes.filter(r => r.p === p.id))
+    rows.push([p.name, fmtQty(qty(p)), cnt(p.id), r.c, new Date(r.t).toLocaleString('ru-RU')]);
+  const csv = '﻿' + rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+  saveFile(`QR_${today()}.csv`, new Blob([csv], { type: 'text/csv' }));
+});
+$('#bak').addEventListener('click', () => {
+  const data = { app: 'qr-sklad', v: 1, at: new Date().toISOString(),
+    products: S.products.map(p => ({ name: p.name, half: p.half })),
+    codes: S.codes.map(r => ({ c: r.c, name: byId.get(r.p)?.name, t: r.t })) };
+  saveFile(`QR_backup_${today()}.json`, new Blob([JSON.stringify(data)], { type: 'application/json' }));
+});
+$('#importFile').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (!d || !Array.isArray(d.codes)) throw 0;
+    const byName = new Map(S.products.map(p => [p.name, p]));
+    (d.products || []).forEach(x => {
+      if (!x || !x.name) return;
+      const p = byName.get(x.name);
+      if (p) p.half = !!x.half;
+      else { const np = { id: 'c' + Date.now().toString(36) + S.products.length, name: x.name, half: !!x.half }; S.products.push(np); byName.set(np.name, np); }
+    });
+    let added = 0;
+    for (const r of d.codes) {
+      if (!r || !r.c || codeMap.has(r.c)) continue;
+      let p = byName.get(r.name);
+      if (!p) { p = { id: 'c' + Date.now().toString(36) + S.products.length, name: r.name || 'Без названия', half: false }; S.products.push(p); byName.set(p.name, p); }
+      S.codes.push({ c: r.c, p: p.id, t: r.t || Date.now() }); codeMap.set(r.c, true); added++;
+    }
+    reindex(); save(); renderAll();
+    toast(`Восстановлено кодов: ${added}`, 'ok');
+  } catch (err) { toast('Это не файл резервной копии QR Склад', 'bad'); }
+});
+let clrT = 0;
+$('#clr').addEventListener('click', e => {
+  const b = e.currentTarget;
+  if (!S.codes.length) { toast('Кодов нет'); return; }
+  if (!b.classList.contains('arm')) {
+    b.classList.add('arm'); b.textContent = `Точно удалить ${S.codes.length} ${plural(S.codes.length, 'код', 'кода', 'кодов')}? Нажмите ещё раз`;
+    clearTimeout(clrT); clrT = setTimeout(() => { b.classList.remove('arm'); b.textContent = 'Очистить все коды'; }, 3500);
+    return;
+  }
+  clearTimeout(clrT); b.classList.remove('arm'); b.textContent = 'Очистить все коды';
+  S.codes = []; reindex(); save(); renderAll(); toast('Все коды удалены');
+});
+
+/* ---------- tabs ---------- */
+let curTab = 'scan';
+function showTab(t) {
+  curTab = t;
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
+  ['scan', 'codes', 'exp'].forEach(v => { $('#v-' + v).hidden = v !== t; });
+  if (t === 'codes') renderCodes();
+  if (t === 'exp') renderExp();
+  if (t === 'scan') { if (!camLive && !camFailed) camStart(); loop(); }
+}
+document.querySelector('.tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showTab(b.dataset.tab); });
+
+function renderAll() { renderList(); renderRecent(); renderHud(); renderTotal(); if (curTab === 'codes') renderCodes(); if (curTab === 'exp') renderExp(); }
+renderAll();
+camStart();
+})();
+</script>
+
+</body></html>
