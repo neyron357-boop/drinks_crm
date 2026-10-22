@@ -66,6 +66,7 @@ main{flex:1;min-height:0;position:relative}
 .pill svg{width:18px;height:18px}
 .pill.light{background:var(--cam-ink);color:var(--cam-bg)}
 .pill.glass{background:rgba(255,255,255,.12);color:var(--cam-ink);box-shadow:inset 0 0 0 1px rgba(255,255,255,.22)}
+.idle a.pill{text-decoration:none}
 .idle p{margin:0;max-width:36ch;color:var(--cam-dim);font-size:13px;line-height:1.45}
 
 .hud-top{position:absolute;left:0;right:0;top:0;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding-block:12px 28px;
@@ -196,6 +197,7 @@ h2:first-child{margin-top:6px}
             <label class="pill glass" for="photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>Фото с QR</label>
           </div>
           <p id="camMsg">Запуск камеры…</p>
+          <a class="pill glass" id="openSite" href="https://raw.githack.com/neyron357-boop/drinks_crm/qr-sklad/index.html" target="_blank" rel="noopener" hidden>Открыть версию с камерой ↗</a>
         </div>
         <div class="hud-top gut">
           <button class="hud-name" id="hudName" type="button">Выберите товар</button>
@@ -646,7 +648,7 @@ async function playVideo() {
 async function camStart() {
   if (camLive || camStarting) return;
   if (!window.isSecureContext || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    camFailed = true;
+    camFailed = true; $('#openSite').hidden = location.hostname === 'raw.githack.com';
     camMsg('Здесь браузер не даёт доступ к камере. Откройте приложение по прямой ссылке https:// в Chrome или Safari.');
     return;
   }
@@ -655,6 +657,7 @@ async function camStart() {
   try { stream = await getStream(); }
   catch (e) {
     camStarting = false; camFailed = true;
+    $('#openSite').hidden = location.hostname === 'raw.githack.com';
     const n = e && e.name;
     camMsg(n === 'NotAllowedError' || n === 'SecurityError'
       ? 'Камера заблокирована в этом окне. Если вы в приложении Claude или Telegram — откройте ссылку в Chrome/Safari. Если в браузере — разрешите камеру в настройках сайта и нажмите «Включить камеру».'
